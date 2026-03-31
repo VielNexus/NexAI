@@ -116,6 +116,38 @@ apt_install_if_needed() {
   "${sudo_cmd[@]}" apt-get install -y "${missing[@]}"
 }
 
+ensure_nodejs_supported() {
+  local need_nodesource=0
+  local node_major=""
+  if command -v node >/dev/null 2>&1; then
+    node_major="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || true)"
+  fi
+  if [[ -z "$node_major" ]] || [[ "$node_major" -lt 20 ]]; then
+    need_nodesource=1
+  fi
+
+  if [[ "$need_nodesource" -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ "${NEXAI_SKIP_APT:-0}" == "1" ]]; then
+    die "error: Node.js >= 20 is required, but the current version is insufficient and NEXAI_SKIP_APT=1."
+  fi
+
+  local sudo_cmd=()
+  if [[ "$(id -u)" -ne 0 ]]; then
+    require_cmd sudo
+    sudo_cmd=(sudo)
+  fi
+
+  info "Installing Node.js 20 runtime for SolWeb..."
+  "${sudo_cmd[@]}" mkdir -p /etc/apt/keyrings
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | "${sudo_cmd[@]}" gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | "${sudo_cmd[@]}" tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+  "${sudo_cmd[@]}" apt-get update
+  "${sudo_cmd[@]}" apt-get install -y nodejs
+}
+
 prepare_repo_checkout() {
   local app_root="$1"
   local repo_url="$2"
@@ -155,6 +187,7 @@ build_solweb() {
     return 0
   fi
   info "Installing SolWeb dependencies..."
+  rm -rf "$app_root/SolWeb/node_modules"
   npm --prefix "$app_root/SolWeb" install
   info "Building SolWeb production assets..."
   npm --prefix "$app_root/SolWeb" run build
@@ -221,11 +254,12 @@ main() {
   printf '  Model provider: %s\n' "$provider"
   printf '\n'
 
-  apt_install_if_needed ca-certificates curl git python3 python3-venv python3-pip nodejs npm
+  apt_install_if_needed ca-certificates curl git gnupg python3 python3-venv python3-pip
   require_cmd git
   require_cmd python3
-  require_cmd npm
   require_cmd bash
+  ensure_nodejs_supported
+  require_cmd npm
 
   prepare_repo_checkout "$app_root" "$repo_url" "$ref"
   build_solweb "$app_root"
