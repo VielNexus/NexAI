@@ -67,6 +67,13 @@ require_cmd() {
   fi
 }
 
+ensure_local_bin_on_path_for_session() {
+  local user_bin_dir="${HOME}/.local/bin"
+  if ! echo ":$PATH:" | grep -Fq ":${user_bin_dir}:"; then
+    export PATH="${user_bin_dir}:$PATH"
+  fi
+}
+
 ensure_linux() {
   if [[ "${OSTYPE:-}" != linux* ]]; then
     die "error: install.sh currently supports Linux only."
@@ -264,14 +271,16 @@ main() {
   prepare_repo_checkout "$app_root" "$repo_url" "$ref"
   build_solweb "$app_root"
   run_bootstrap_install "$app_root" "$runtime_root" "$working_dir" "$profile" "$provider" "$ollama_url"
+  ensure_local_bin_on_path_for_session
 
-  local launcher="${HOME}/.local/bin/nexai"
+  local launcher="nexai"
   printf '\n'
   ok "NexAI install completed."
-  printf '  Launcher:       %s\n' "$launcher"
+  printf '  Launcher:       %s\n' "${HOME}/.local/bin/nexai"
   printf '  App root:       %s\n' "$app_root"
   printf '  Runtime root:   %s\n' "$runtime_root"
   printf '\n'
+  ok "The 'nexai' command is ready to use. Run: nexai start"
 
   if [[ "${NEXAI_AUTOSTART:-0}" == "1" ]]; then
     info "Starting NexAI services..."

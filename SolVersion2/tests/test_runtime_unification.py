@@ -17,6 +17,7 @@ from sol.plugins.manager import PluginManager
 from sol.runtime.paths import build_runtime_paths, ensure_runtime_dirs
 from sol.skills.manager import SkillManager
 from sol.tools.base import Tool
+from sol.tools.fs import FsWriteTool
 from sol.tools.registry import ToolRegistry
 
 from conftest import write_test_config
@@ -156,3 +157,29 @@ def test_memory_promotion_policy_filters_transient_noise(tmp_path: Path, monkeyp
     policy.promote_tool_result(tool=registry.get_tool("web.fetch"), args={}, output={"url": "https://example.com", "text": "x" * 200})
 
     assert captured == ["web.fetch"]
+
+
+def test_chat_executes_relative_file_write_request(tmp_path: Path) -> None:
+    agent, registry, _cfg, _runtime_paths = _build_agent(tmp_path)
+    work_dir = agent.ctx.cfg.paths.working_dir.resolve(strict=False)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    object.__setattr__(agent.ctx.cfg.fs, "allowed_roots", (work_dir,))
+    object.__setattr__(agent.ctx.cfg.fs, "deny_drive_letters", tuple())
+    object.__setattr__(agent.ctx.cfg.fs, "denied_substrings", tuple())
+    registry.register(FsWriteTool())
+
+    result = agent.chat(
+        user_message="create demo.txt with content hello",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    created = work_dir / "demo.txt"
+    assert created.exists()
+    assert created.read_text(encoding="utf-8") == "hello"
+    assert result.ok is True
+    assert result.tool_results
+    assert result.tool_results[0].tool == "fs.write_text"
+    assert result.tool_results[0].output["path"] == str(created)
+    assert "Tool execution results:" in result.text

@@ -59,6 +59,40 @@ require_cmd() {
   fi
 }
 
+detect_shell_profile() {
+  local shell_name=""
+  shell_name="$(basename "${SHELL:-}")"
+  if [[ -n "${ZSH_VERSION:-}" ]] || [[ "$shell_name" == "zsh" ]]; then
+    printf '%s\n' "${HOME}/.zshrc"
+    return 0
+  fi
+  printf '%s\n' "${HOME}/.bashrc"
+}
+
+ensure_user_bin_path() {
+  local profile_path="$1"
+  local path_line="$2"
+  local updated_current="0"
+  local updated_profile="0"
+
+  if ! echo ":$PATH:" | grep -Fq ":${USER_BIN_DIR}:"; then
+    export PATH="${USER_BIN_DIR}:$PATH"
+    updated_current="1"
+  fi
+
+  if [[ ! -f "$profile_path" ]]; then
+    : >"$profile_path"
+  fi
+
+  if ! grep -Fqx "$path_line" "$profile_path"; then
+    printf '\n%s\n' "$path_line" >>"$profile_path"
+    updated_profile="1"
+  fi
+
+  PATH_UPDATE_CURRENT="$updated_current"
+  PATH_UPDATE_PROFILE="$updated_profile"
+}
+
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 APP_ROOT="$SCRIPT_DIR"
 RUN_SETUP=1
@@ -126,6 +160,13 @@ LAUNCHER_PATH="${USER_BIN_DIR}/nexai"
 COMPAT_LAUNCHER_PATH="${USER_BIN_DIR}/sol"
 INSTALL_LOG="${BOOTSTRAP_ROOT}/install.log"
 BOOTSTRAP_FALLBACK="${BOOTSTRAP_PYTHON} -m sol"
+PROFILE_PATH="$(detect_shell_profile)"
+DEFAULT_USER_BIN_DIR="${HOME}/.local/bin"
+if [[ "$USER_BIN_DIR" == "$DEFAULT_USER_BIN_DIR" ]]; then
+  PATH_EXPORT_LINE='export PATH="$HOME/.local/bin:$PATH"'
+else
+  PATH_EXPORT_LINE="export PATH=\"${USER_BIN_DIR}:\$PATH\""
+fi
 
 mkdir -p "$BOOTSTRAP_ROOT" "$USER_BIN_DIR"
 : >"$INSTALL_LOG"
@@ -237,14 +278,7 @@ PY
   die "error: failed to write the NexAI launchers."
 }
 
-if ! echo ":$PATH:" | grep -Fq ":${USER_BIN_DIR}:"; then
-  warn "warning: ${USER_BIN_DIR} is not currently on PATH."
-  warn "add this to your shell profile:"
-  warn "  export PATH=\"${USER_BIN_DIR}:\$PATH\""
-  warn "launcher path: ${LAUNCHER_PATH}"
-  warn "compatibility alias: ${COMPAT_LAUNCHER_PATH}"
-  warn "bootstrap fallback: ${BOOTSTRAP_FALLBACK}"
-fi
+ensure_user_bin_path "$PROFILE_PATH" "$PATH_EXPORT_LINE"
 
 CURRENT_NEXAI="$(command -v nexai 2>/dev/null || true)"
 if [[ -n "$CURRENT_NEXAI" ]] && [[ "$CURRENT_NEXAI" != "$LAUNCHER_PATH" ]]; then
@@ -265,7 +299,16 @@ printf '  Compatibility alias:%s\n' " ${COMPAT_LAUNCHER_PATH}"
 printf '  CLI fallback:       %s\n' "${BOOTSTRAP_FALLBACK}"
 printf '  Default runtime:    %s\n' "${HOME}/.local/share/sol"
 printf '  Install log:        %s\n' "${INSTALL_LOG}"
+printf '  Shell profile:      %s\n' "${PROFILE_PATH}"
 printf '\n'
+
+if [[ "$PATH_UPDATE_PROFILE" == "1" ]]; then
+  info "Added ${USER_BIN_DIR} to PATH in ${PROFILE_PATH}."
+fi
+if [[ "$PATH_UPDATE_CURRENT" == "1" ]]; then
+  info "Updated PATH for this installer session."
+fi
+ok "The 'nexai' command is ready to use. Run: nexai start"
 
 if (( RUN_SETUP )); then
   SETUP_CMD=("${BOOTSTRAP_PYTHON}" -m sol setup "${SETUP_ARGS[@]}")
@@ -282,12 +325,13 @@ if (( RUN_SETUP )); then
 fi
 
 info "Next steps:"
-printf '  %s setup\n' "${LAUNCHER_PATH}"
-printf '  %s start\n' "${LAUNCHER_PATH}"
-printf '  %s stop\n' "${LAUNCHER_PATH}"
-printf '  %s restart\n' "${LAUNCHER_PATH}"
-printf '  %s status\n' "${LAUNCHER_PATH}"
-printf '  %s uninstall\n' "${LAUNCHER_PATH}"
-printf '  %s doctor\n' "${BOOTSTRAP_FALLBACK}"
+printf '  %s setup\n' "nexai"
+printf '  %s start\n' "nexai"
+printf '  %s stop\n' "nexai"
+printf '  %s restart\n' "nexai"
+printf '  %s status\n' "nexai"
+printf '  %s uninstall\n' "nexai"
+printf '  %s doctor\n' "nexai"
 printf '  Legacy alias: %s\n' "${COMPAT_LAUNCHER_PATH}"
+printf '  Bootstrap fallback: %s\n' "${BOOTSTRAP_FALLBACK}"
 printf '  Web UI: http://127.0.0.1:5173\n'

@@ -5,6 +5,7 @@ import difflib
 import re
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Any
 
 from sol.core.context import SolContext
@@ -2131,9 +2132,13 @@ class Agent:
                 "whats in",
                 "what is in",
                 "contents of",
+                "read file",
+                "open file",
+                "cat ",
                 "write",
                 "create file",
                 "write file",
+                "create ",
                 "search the web",
                 "search web",
                 "look up",
@@ -2546,6 +2551,16 @@ class Agent:
                 if k in out and k not in schema:
                     out.pop(k, None)
 
+        if canonical in {"fs.list", "fs.read_text", "fs.write_text", "fs.grep"} and isinstance(out.get("path"), str):
+            out["path"] = self._resolve_fs_path(out["path"])
+        elif canonical == "fs.move":
+            if isinstance(out.get("src"), str):
+                out["src"] = self._resolve_fs_path(out["src"])
+            if isinstance(out.get("dst"), str):
+                out["dst"] = self._resolve_fs_path(out["dst"])
+        elif canonical == "fs.delete" and isinstance(out.get("paths"), list):
+            out["paths"] = [self._resolve_fs_path(p) if isinstance(p, str) else p for p in out["paths"]]
+
         return out
 
     def _unknown_tool_message(self, raw_name: str) -> str:
@@ -2571,6 +2586,39 @@ class Agent:
         exp = ", ".join(expected) if expected else "<unknown>"
         return f"Invalid tool args for {tool_name}: {msg}. Expected keys: {exp}"
 
+    def _resolve_fs_path(self, raw: str) -> str:
+        value = (raw or "").strip()
+        if not value:
+            return value
+
+        p = Path(value).expanduser()
+        if p.is_absolute():
+            return str(p)
+
+        working_dir = getattr(getattr(self.ctx.cfg, "paths", None), "working_dir", None)
+        if working_dir:
+            return str((Path(working_dir) / p).resolve(strict=False))
+        return str(p.resolve(strict=False))
+
+    def _looks_like_relative_path(self, raw: str) -> bool:
+        candidate = (raw or "").strip().strip("\"'")
+        if not candidate:
+            return False
+        if candidate.startswith(("http://", "https://")):
+            return False
+        if re.match(r"^[A-Za-z]:[\\/]", candidate):
+            return True
+        if candidate.startswith(("~/", "~\\", "./", ".\\", "../", "..\\")):
+            return True
+        if "/" in candidate or "\\" in candidate:
+            return True
+        if " " in candidate:
+            return False
+        suffix = Path(candidate).suffix
+        if suffix and suffix not in {".", ".."}:
+            return True
+        return False
+
     def _extract_path(self, text: str) -> str | None:
         def _clean(s: str) -> str:
             return (s or "").strip().rstrip(").,;!?\"'")
@@ -2578,21 +2626,24 @@ class Agent:
         # Prefer quoted paths.
         for m in re.finditer(r"(['\"])(.+?)\\1", text):
             candidate = _clean(m.group(2))
-            if re.match(r"^[A-Za-z]:[\\/]", candidate):
+            if self._looks_like_relative_path(candidate):
                 return candidate
         m = re.search(r"([A-Za-z]:[\\/][^\s]+)", text)
         if m:
             return _clean(m.group(1))
+        for m_rel in re.finditer(r"(?<![\w./\\-])((?:\.{1,2}[\\/]|~[\\/])?[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)*)", text):
+            candidate = _clean(m_rel.group(1))
+            if self._looks_like_relative_path(candidate):
+                return candidate
         root = self._extract_drive_root(text)
         if root:
             return _clean(root)
         return None
 
     def _extract_write_path(self, text: str) -> str | None:
-        low = text.lower()
         # Try to find a path after "write"/"create".
         m = re.search(
-            r"\b(?:write|create)\b\s+(?:a\s+file\s+)?(?P<path>(?:[A-Za-z]:[\\/][^\s\"']+|\"[^\"]+\"|'[^']+'))",
+            r"\b(?:write|create)\b\s+(?:a\s+file\s+)?(?P<path>(?:[A-Za-z]:[\\/][^\s\"']+|(?:\.{1,2}[\\/]|~[\\/])?[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)*|\"[^\"]+\"|'[^']+'))",
             text,
             flags=re.IGNORECASE,
         )
@@ -2615,6 +2666,12 @@ class Agent:
             if q.startswith(("'", '"', "`")) and q.endswith(("'", '"', "`")):
                 return q[1:-1]
             return q
+
+        m_inline = re.search(r"(?:with\s+(?:text|content)|containing)\s+(?P<content>.+)$", text, flags=re.IGNORECASE | re.DOTALL)
+        if m_inline:
+            content = m_inline.group("content").strip()
+            if content:
+                return content
 
         m2 = re.search(r"(?:text|content)\s*:\s*(.+)$", text, flags=re.IGNORECASE | re.DOTALL)
         if m2:
@@ -2658,7 +2715,7 @@ class Agent:
 
         def check_one(raw: str) -> None:
             try:
-                validate_path(raw, cfg=self.ctx.cfg, for_write=for_write)
+                validate_path(self._resolve_fs_path(raw), cfg=self.ctx.cfg, for_write=for_write)
             except FsPolicyError as e:
                 raise ToolExecutionError(str(e))
 
