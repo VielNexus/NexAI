@@ -22,7 +22,7 @@ from sol.core.unsafe_mode import disable as disable_unsafe
 from sol.core.unsafe_mode import enable as enable_unsafe
 from sol.core.working_memory import WorkingMemoryManager
 from sol.runtime.paths import build_runtime_paths, ensure_runtime_dirs
-from sol.tools.fs import FsWriteTool
+from sol.tools.fs import FsDeleteTool, FsReadTool, FsWriteTool
 from sol.tools.registry import ToolRegistry
 from conftest import write_test_config
 
@@ -51,6 +51,8 @@ def _build_live_agent(tmp_path: Path) -> tuple[Agent, Path]:
     )
     registry = ToolRegistry()
     registry.register(FsWriteTool())
+    registry.register(FsReadTool())
+    registry.register(FsDeleteTool())
     agent = Agent.create(ctx=ctx, tools=registry)
     work_dir = agent.ctx.cfg.paths.working_dir.resolve(strict=False)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -204,3 +206,142 @@ def test_chat_live_route_honors_requested_paths_and_avoids_helper_words(monkeypa
 
     assert not (work_dir / "named").exists()
     assert not (work_dir / "at").exists()
+
+
+def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, work_dir = _build_live_agent(tmp_path)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+
+    created = client.post("/v1/chat", json={"message": "create a file named demo.txt with content hello", "thread_id": None})
+    assert created.status_code == 200, created.text
+    assert (work_dir / "demo.txt").exists()
+
+    posix_created = client.post("/v1/chat", json={"message": "create a file at /home/nexus/demo.txt with content hello", "thread_id": None})
+    assert posix_created.status_code == 200, posix_created.text
+
+    read_prompts = [
+        "read demo.txt",
+        "show me the contents of demo.txt",
+        "what is in demo.txt",
+        "what is the contents of the file named demo.txt",
+        "cat demo.txt",
+        "show the file I just created",
+        "what is the contents of the file named demo",
+    ]
+    for prompt in read_prompts:
+        response = client.post("/v1/chat", json={"message": prompt, "thread_id": None})
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert "fs.read_text: OK" in payload["content"]
+        assert "hello" in payload["content"]
+
+    posix_read = client.post("/v1/chat", json={"message": "open /home/nexus/demo.txt", "thread_id": None})
+    assert posix_read.status_code == 200, posix_read.text
+    assert "fs.read_text: OK" in posix_read.json()["content"]
+    assert "hello" in posix_read.json()["content"]
+    assert not (work_dir / "named").exists()
+    assert not (work_dir / "at").exists()
+
+
+def test_chat_live_route_delete_uses_fs_delete_when_allowed(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, work_dir = _build_live_agent(tmp_path)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    created = client.post("/v1/chat", json={"message": "create a file named demo.txt with content hello", "thread_id": None})
+    assert created.status_code == 200, created.text
+    target = work_dir / "demo.txt"
+    assert target.exists()
+
+    enable_unsafe("thread-1", reason="Allow delete in API test", user="tester", cfg=agent.ctx.cfg)
+    try:
+        deleted = client.post("/v1/chat", json={"message": "delete demo.txt", "thread_id": None})
+        assert deleted.status_code == 200, deleted.text
+        assert "fs.delete: OK" in deleted.json()["content"]
+        assert not target.exists()
+
+        recreated = client.post("/v1/chat", json={"message": "create a file named demo.txt with content hello", "thread_id": None})
+        assert recreated.status_code == 200, recreated.text
+        assert target.exists()
+
+        deleted_followup = client.post("/v1/chat", json={"message": "delete it", "thread_id": None})
+        assert deleted_followup.status_code == 200, deleted_followup.text
+        assert "fs.delete: OK" in deleted_followup.json()["content"]
+        assert not target.exists()
+    finally:
+        disable_unsafe("thread-1", reason="Reset API delete test state", user="tester", cfg=agent.ctx.cfg)
+
+
+def test_chat_live_route_clarifies_when_read_target_is_unknown_and_does_not_hallucinate(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, _work_dir = _build_live_agent(tmp_path)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    response = client.post("/v1/chat", json={"message": "show the file I just created", "thread_id": None})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "fs.read_text: OK" not in payload["content"]
+    assert "could not be determined" in payload["content"].lower()
+    assert "hello" not in payload["content"].lower()

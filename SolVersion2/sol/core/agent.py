@@ -513,17 +513,15 @@ class Agent:
                 "list directory",
                 "show files",
                 "what files",
-                "what's in",
-                "whats in",
-                "what is in",
-                "contents of",
-                "what's inside",
-                "what is inside",
+                "list ",
             )
         )
-        fs_read_intent = any(k in low for k in ("read file", "open file", "show contents", "cat "))
+        fs_read_intent = self._is_file_read_intent(t)
+        fs_delete_intent = self._is_file_delete_intent(t)
         fs_write_intent = self._is_file_write_intent(t)
-        if (fs_list_intent or fs_read_intent or fs_write_intent) and has_path:
+        if fs_read_intent or fs_delete_intent or fs_write_intent:
+            return True
+        if fs_list_intent and has_path:
             return True
 
         web_fetch_intent = any(k in low for k in ("fetch ", "open url", "open this url", "open ")) and has_url
@@ -566,7 +564,10 @@ class Agent:
             return []
         if self._is_web_verification_intent(t) and bool(self.ctx.cfg.web.enabled):
             return self._plan_web_verify(t)
-        return self._plan_from_natural_language(t)
+        try:
+            return self._plan_from_natural_language(t)
+        except AgentPolicyError:
+            return []
 
     def _tool_authority_allowed_status(self, user_text: str) -> tuple[bool, str]:
         """Return (allowed, reason) for tool-authority gating.
@@ -581,11 +582,39 @@ class Agent:
             return False, "Empty request."
 
         path = self._extract_path(t) or self._extract_drive_root(t)
+        read_path = self._extract_read_path(t)
+        delete_path = self._extract_delete_path(t)
         url = self._extract_url(t)
         has_tibia_hint = ("tibia" in low and ("wiki" in low or "fandom" in low or "monster" in low or "monsters" in low))
 
         # Filesystem intents
-        if any(k in low for k in ("list files", "list directory", "show files", "what files", "contents of", "what's in", "whats in", "what is in")):
+        if self._is_file_delete_intent(t):
+            if not delete_path:
+                return False, "Target file for fs.delete could not be determined."
+            tool = self.tools.get_tool("fs.delete")
+            if not tool:
+                return False, "fs.delete tool is not available."
+            try:
+                _tool, validated = self.tools.prepare_for_execution("fs.delete", {"paths": [delete_path]}, reason="policy precheck")
+                self._precheck_policy(tool=_tool, args=validated)
+            except Exception as e:
+                return False, str(e)
+            return True, "ok"
+
+        if self._is_file_read_intent(t):
+            if not read_path:
+                return False, "Target file for fs.read_text could not be determined."
+            tool = self.tools.get_tool("fs.read_text")
+            if not tool:
+                return False, "fs.read_text tool is not available."
+            try:
+                _tool, validated = self.tools.prepare_for_execution("fs.read_text", {"path": read_path}, reason="policy precheck")
+                self._precheck_policy(tool=_tool, args=validated)
+            except Exception as e:
+                return False, str(e)
+            return True, "ok"
+
+        if any(k in low for k in ("list files", "list directory", "show files", "what files", "list ")):
             if not path:
                 return False, "Missing path for fs.list."
             tool = self.tools.get_tool("fs.list")
@@ -593,19 +622,6 @@ class Agent:
                 return False, "fs.list tool is not available."
             try:
                 _tool, validated = self.tools.prepare_for_execution("fs.list", {"path": path, "recursive": False, "max_entries": 200}, reason="policy precheck")
-                self._precheck_policy(tool=_tool, args=validated)
-            except Exception as e:
-                return False, str(e)
-            return True, "ok"
-
-        if any(k in low for k in ("read file", "open file", "show contents", "cat ")):
-            if not path:
-                return False, "Missing path for fs.read_text."
-            tool = self.tools.get_tool("fs.read_text")
-            if not tool:
-                return False, "fs.read_text tool is not available."
-            try:
-                _tool, validated = self.tools.prepare_for_execution("fs.read_text", {"path": path}, reason="policy precheck")
                 self._precheck_policy(tool=_tool, args=validated)
             except Exception as e:
                 return False, str(e)
@@ -1606,7 +1622,10 @@ class Agent:
         if not bool(self.ctx.cfg.agent.auto_tools):
             return Plan(steps=tuple())
 
-        natural_steps = self._plan_from_natural_language(text)
+        try:
+            natural_steps = self._plan_from_natural_language(text)
+        except AgentPolicyError:
+            natural_steps = []
         return Plan(steps=tuple(natural_steps))
 
     def validate(self, plan: Plan) -> None:
@@ -2123,47 +2142,36 @@ class Agent:
         """
 
         lowered = text.lower()
-        if not any(
-            k in lowered
-            for k in (
-                "list files",
-                "list directory",
-                "show files",
-                "what files",
-                "what's in",
-                "whats in",
-                "what is in",
-                "contents of",
-                "read file",
-                "open file",
-                "cat ",
-                "write",
-                "create file",
-                "write file",
-                "create ",
-                "make a file",
-                "make file",
-                "edit ",
-                "replace its contents",
-                "replace the contents",
-                "replace contents",
-                "search the web",
-                "search web",
-                "look up",
-                "lookup",
-                "google",
-                "fetch",
-                "open url",
-                "crawl",
-                "scrape",
-                "ingest",
-                "github",
-                "repo",
-                "repository",
-                "generate monster",
-                "remember",
-                "learn",
-                "analyze",
+        if not (
+            self._is_file_read_intent(text)
+            or self._is_file_delete_intent(text)
+            or self._is_file_write_intent(text)
+            or any(
+                k in lowered
+                for k in (
+                    "list files",
+                    "list directory",
+                    "show files",
+                    "what files",
+                    "list ",
+                    "search the web",
+                    "search web",
+                    "look up",
+                    "lookup",
+                    "google",
+                    "fetch",
+                    "open url",
+                    "crawl",
+                    "scrape",
+                    "ingest",
+                    "github",
+                    "repo",
+                    "repository",
+                    "generate monster",
+                    "remember",
+                    "learn",
+                    "analyze",
+                )
             )
         ):
             return []
@@ -2256,15 +2264,36 @@ class Agent:
                 ]
 
         kinds_with_pos: list[tuple[int, str]] = []
+        delete_pos = _first_pos("delete ", "delete file", "delete the file", "remove ", "remove file", "remove the file")
+        if delete_pos != -1:
+            kinds_with_pos.append((delete_pos, "delete"))
+        read_pos = _first_pos(
+            "read file",
+            "read ",
+            "open file",
+            "open ",
+            "cat ",
+            "show contents",
+            "show me the contents",
+            "show the contents",
+            "contents of",
+            "what is the contents",
+            "what are the contents",
+            "what's in",
+            "whats in",
+            "what is in",
+            "what is inside",
+            "what's inside",
+            "show the file i just created",
+            "show the file i made",
+        )
+        if read_pos != -1:
+            kinds_with_pos.append((read_pos, "read"))
         list_pos = _first_pos(
             "list files",
             "list directory",
             "show files",
             "what files",
-            "what's in",
-            "whats in",
-            "what is in",
-            "contents of",
             "list ",
         )
         if list_pos != -1:
@@ -2416,6 +2445,28 @@ class Agent:
                         tool_name=self._normalize_tool_name("fs.list"),
                         arguments={"path": path, "recursive": False, "max_entries": 200},
                         reason=f"User requested listing files under {path}.",
+                    )
+                )
+            elif kind == "read":
+                path = self._extract_read_path(s)
+                if not path:
+                    raise AgentPolicyError("Could not determine a file to read.")
+                out.append(
+                    PlanStep(
+                        tool_name=self._normalize_tool_name("fs.read_text"),
+                        arguments=self._normalize_tool_args("fs.read_text", {"path": path}),
+                        reason=f"User requested reading {path}.",
+                    )
+                )
+            elif kind == "delete":
+                path = self._extract_delete_path(s)
+                if not path:
+                    raise AgentPolicyError("Could not determine a file to delete.")
+                out.append(
+                    PlanStep(
+                        tool_name=self._normalize_tool_name("fs.delete"),
+                        arguments=self._normalize_tool_args("fs.delete", {"paths": [path]}),
+                        reason=f"User requested deleting {path}.",
                     )
                 )
             elif kind == "write":
@@ -2637,6 +2688,46 @@ class Agent:
             )
         )
 
+    def _is_file_read_intent(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(
+            k in low
+            for k in (
+                "read ",
+                "read file",
+                "open file",
+                "open ",
+                "cat ",
+                "show contents",
+                "show me the contents",
+                "show the contents",
+                "contents of",
+                "what is the contents",
+                "what are the contents",
+                "what's in",
+                "whats in",
+                "what is in",
+                "what is inside",
+                "what's inside",
+                "show the file i just created",
+                "show the file i made",
+            )
+        )
+
+    def _is_file_delete_intent(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(
+            k in low
+            for k in (
+                "delete ",
+                "delete file",
+                "delete the file",
+                "remove ",
+                "remove file",
+                "remove the file",
+            )
+        )
+
     def _is_file_edit_intent(self, text: str) -> bool:
         low = (text or "").lower()
         return any(k in low for k in ("edit ", "replace its contents", "replace the contents", "replace contents"))
@@ -2733,6 +2824,100 @@ class Agent:
             if self._looks_like_relative_path(candidate):
                 return candidate
         return None
+
+    def _recent_file_paths(self) -> list[str]:
+        working_memory = getattr(self.ctx, "working_memory", None)
+        if working_memory is None:
+            return []
+        seen: set[str] = set()
+        out: list[str] = []
+
+        for item in reversed(list(getattr(working_memory, "recent_tool_outputs", []) or [])):
+            output = item.get("output") if isinstance(item, dict) else None
+            if isinstance(output, dict):
+                path = output.get("path")
+                if isinstance(path, str) and path.strip():
+                    value = path.strip()
+                    if value not in seen:
+                        seen.add(value)
+                        out.append(value)
+                results = output.get("results")
+                if isinstance(results, list):
+                    for result in results:
+                        if not isinstance(result, dict):
+                            continue
+                        path = result.get("path")
+                        if isinstance(path, str) and path.strip():
+                            value = path.strip()
+                            if value not in seen:
+                                seen.add(value)
+                                out.append(value)
+
+        for resource in reversed(list(getattr(working_memory, "focus_resources", []) or [])):
+            value = str(resource or "").strip()
+            if value and value not in seen:
+                seen.add(value)
+                out.append(value)
+        return out
+
+    def _recent_file_match(self, query: str) -> str | None:
+        needle = (query or "").strip().strip("\"'").rstrip(").,;!?")
+        if not needle:
+            return None
+        needle_low = needle.lower()
+        for candidate in self._recent_file_paths():
+            p = Path(candidate)
+            if needle_low in {p.name.lower(), p.stem.lower()}:
+                return candidate
+        return None
+
+    def _has_contextual_file_reference(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(
+            phrase in low
+            for phrase in (
+                "delete it",
+                "remove it",
+                "open it",
+                "read it",
+                "cat it",
+                "delete that file",
+                "remove that file",
+                "open that file",
+                "read that file",
+                "the file i just created",
+                "the file i just made",
+                "show the file i just created",
+                "show the file i made",
+            )
+        )
+
+    def _resolve_contextual_file_path(self, text: str) -> str | None:
+        if self._has_contextual_file_reference(text):
+            recent = self._recent_file_paths()
+            if recent:
+                return recent[0]
+
+        for pat in (
+            r"\bfile\s+(?:named|called)\s+([A-Za-z0-9_.-]+)\b",
+            r"\b(?:read|open|cat|delete|remove)\s+([A-Za-z0-9_.-]+)\b",
+        ):
+            m = re.search(pat, text, flags=re.IGNORECASE)
+            if not m:
+                continue
+            matched = m.group(1).strip()
+            if matched.lower() in self._FILE_SYNTAX_WORDS:
+                continue
+            recent = self._recent_file_match(matched)
+            if recent:
+                return recent
+        return None
+
+    def _extract_read_path(self, text: str) -> str | None:
+        return self._extract_path(text) or self._resolve_contextual_file_path(text)
+
+    def _extract_delete_path(self, text: str) -> str | None:
+        return self._extract_path(text) or self._resolve_contextual_file_path(text)
 
     def _extract_path(self, text: str) -> str | None:
         def _clean(s: str) -> str:
