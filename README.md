@@ -1,3 +1,4 @@
+First thing before using this system. I am in no way, shape or form how you use NexAI! This system is being ran on your local hardware with/without models ran by other providers other than me. I have NO control over this system once installed on your system therefor you are the sole responsible person on how it is used, and how it reacts! I have no say of ANYTHING once you download/install NexAI!
 # NexAI
 
 NexAI is a local-first, supervised AI assistant platform designed for inspectable, policy-aware operation on user-controlled infrastructure. It combines a CLI agent runtime, FastAPI backend, web UI, installable extension model, and an evolving autonomous job/plugin/skill architecture while keeping auditability and approval gates central to the design.
@@ -130,4 +131,3 @@ Python components live primarily under `SolVersion2/` and `apps/api/`. The web U
 
 Apache-2.0
 
-curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
