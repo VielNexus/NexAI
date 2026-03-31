@@ -522,7 +522,7 @@ class Agent:
             )
         )
         fs_read_intent = any(k in low for k in ("read file", "open file", "show contents", "cat "))
-        fs_write_intent = any(k in low for k in ("write file", "create file", "write ", "create "))
+        fs_write_intent = self._is_file_write_intent(t)
         if (fs_list_intent or fs_read_intent or fs_write_intent) and has_path:
             return True
 
@@ -611,11 +611,13 @@ class Agent:
                 return False, str(e)
             return True, "ok"
 
-        if any(k in low for k in ("write file", "create file", "write ", "create ")):
+        if self._is_file_write_intent(t):
             w_path = self._extract_write_path(t) or path
             content = self._extract_write_content(t)
             if not w_path:
                 return False, "Missing path for fs.write_text."
+            if content is None and not self._is_file_edit_intent(t):
+                content = ""
             if content is None:
                 return False, "Missing content for fs.write_text."
             tool = self.tools.get_tool("fs.write_text")
@@ -2139,6 +2141,12 @@ class Agent:
                 "create file",
                 "write file",
                 "create ",
+                "make a file",
+                "make file",
+                "edit ",
+                "replace its contents",
+                "replace the contents",
+                "replace contents",
                 "search the web",
                 "search web",
                 "look up",
@@ -2261,7 +2269,19 @@ class Agent:
         )
         if list_pos != -1:
             kinds_with_pos.append((list_pos, "list"))
-        write_pos = _first_pos("write file", "create file", "write ", "create ")
+        write_pos = _first_pos(
+            "write file",
+            "write a file",
+            "create file",
+            "create ",
+            "make a file",
+            "make file",
+            "write ",
+            "edit ",
+            "replace its contents",
+            "replace the contents",
+            "replace contents",
+        )
         if write_pos != -1:
             kinds_with_pos.append((write_pos, "write"))
         search_pos = _first_pos("search the web", "search web", "search ", "look up", "lookup", "google ")
@@ -2403,6 +2423,8 @@ class Agent:
                 content = self._extract_write_content(s)
                 if not path:
                     raise AgentPolicyError("Could not determine a file path to write. Example: 'write /path/to/file.txt with text \"...\"'.")
+                if content is None and not self._is_file_edit_intent(s):
+                    content = ""
                 if content is None:
                     raise AgentPolicyError("Could not determine file content. Use: with text \"...\"")
                 out.append(
@@ -2586,6 +2608,28 @@ class Agent:
         exp = ", ".join(expected) if expected else "<unknown>"
         return f"Invalid tool args for {tool_name}: {msg}. Expected keys: {exp}"
 
+    def _is_file_write_intent(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(
+            k in low
+            for k in (
+                "create file",
+                "create ",
+                "write file",
+                "write a file",
+                "make a file",
+                "make file",
+                "edit ",
+                "replace its contents",
+                "replace the contents",
+                "replace contents",
+            )
+        )
+
+    def _is_file_edit_intent(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(k in low for k in ("edit ", "replace its contents", "replace the contents", "replace contents"))
+
     def _resolve_fs_path(self, raw: str) -> str:
         value = (raw or "").strip()
         if not value:
@@ -2619,6 +2663,66 @@ class Agent:
             return True
         return False
 
+    def _split_file_content_clause(self, text: str) -> tuple[str, str | None]:
+        src = text or ""
+        patterns = (
+            r"\band\s+inside(?:\s+of\s+that\s+file)?\s+write\b\s*:?",
+            r"\band\s+put\s+this\s+in\s+it\b\s*:?",
+            r"\bput\s+this\s+in\s+it\b\s*:?",
+            r"\bwrite\s+the\s+following\s+into\s+the\s+file\b\s*:?",
+            r"\band\s+replace\s+(?:its\s+|the\s+)?contents?\s+with\b\s*:?",
+            r"\breplace\s+(?:its\s+|the\s+)?contents?\s+with\b\s*:?",
+            r"\bwith\s+(?:text|content)\b\s*:?",
+            r"\bcontaining\b\s*:?",
+        )
+        best: tuple[int, int] | None = None
+        for pat in patterns:
+            m = re.search(pat, src, flags=re.IGNORECASE | re.DOTALL)
+            if not m:
+                continue
+            span = (m.start(), m.end())
+            if best is None or span[0] < best[0]:
+                best = span
+        if best is None:
+            return src.strip(), None
+        head = src[: best[0]].strip()
+        tail = src[best[1] :].strip()
+        return head, (tail or None)
+
+    def _strip_file_intro_words(self, text: str) -> str:
+        value = (text or "").strip()
+        while value:
+            updated = re.sub(r"^(?:a|an|the|new)\b\s*", "", value, flags=re.IGNORECASE)
+            updated = re.sub(r"^(?:new\s+)?file\b\s*", "", updated, flags=re.IGNORECASE)
+            updated = re.sub(r"^(?:named|called)\b\s*", "", updated, flags=re.IGNORECASE)
+            updated = re.sub(r"^at\b\s*", "", updated, flags=re.IGNORECASE)
+            updated = updated.strip()
+            if updated == value:
+                break
+            value = updated
+        return value
+
+    def _candidate_path_from_fragment(self, text: str) -> str | None:
+        fragment = (text or "").strip()
+        if not fragment:
+            return None
+
+        q = re.match(r"^([\"'])(.+?)\1", fragment, flags=re.DOTALL)
+        if q:
+            candidate = q.group(2).strip()
+            if self._looks_like_relative_path(candidate):
+                return candidate
+
+        for token in re.split(r"\s+", fragment):
+            candidate = token.strip().rstrip(").,;!?\"'")
+            if not candidate:
+                continue
+            if candidate.lower() in {"named", "called", "file"}:
+                continue
+            if self._looks_like_relative_path(candidate):
+                return candidate
+        return None
+
     def _extract_path(self, text: str) -> str | None:
         def _clean(s: str) -> str:
             return (s or "").strip().rstrip(").,;!?\"'")
@@ -2641,23 +2745,18 @@ class Agent:
         return None
 
     def _extract_write_path(self, text: str) -> str | None:
-        # Try to find a path after "write"/"create".
-        m = re.search(
-            r"\b(?:write|create)\b\s+(?:a\s+file\s+)?(?P<path>(?:[A-Za-z]:[\\/][^\s\"']+|(?:\.{1,2}[\\/]|~[\\/])?[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)*|\"[^\"]+\"|'[^']+'))",
-            text,
-            flags=re.IGNORECASE,
-        )
-        if m:
-            raw = m.group("path").strip()
-            if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
-                raw = raw[1:-1]
-            return raw.strip()
+        action = re.search(r"\b(?:create|make|write|edit)\b\s+(?P<tail>.+)$", text, flags=re.IGNORECASE | re.DOTALL)
+        if action:
+            head, _content = self._split_file_content_clause(action.group("tail"))
+            candidate = self._candidate_path_from_fragment(self._strip_file_intro_words(head))
+            if candidate:
+                return candidate
         return self._extract_path(text)
 
     def _extract_write_content(self, text: str) -> str | None:
         # with text "..." / with content '...' / containing `...`
         m = re.search(
-            r"(?:with\s+(?:text|content)|containing)\s+(?P<q>'[^']*'|\"[^\"]*\"|`[^`]*`)",
+            r"(?:with\s+(?:text|content)|containing|put\s+this\s+in\s+it:?|write\s+the\s+following\s+into\s+the\s+file:?|replace\s+(?:its\s+|the\s+)?contents?\s+with)\s+(?P<q>'[^']*'|\"[^\"]*\"|`[^`]*`)",
             text,
             flags=re.IGNORECASE | re.DOTALL,
         )
@@ -2667,11 +2766,9 @@ class Agent:
                 return q[1:-1]
             return q
 
-        m_inline = re.search(r"(?:with\s+(?:text|content)|containing)\s+(?P<content>.+)$", text, flags=re.IGNORECASE | re.DOTALL)
-        if m_inline:
-            content = m_inline.group("content").strip()
-            if content:
-                return content
+        _head, content = self._split_file_content_clause(text)
+        if content:
+            return content.strip()
 
         m2 = re.search(r"(?:text|content)\s*:\s*(.+)$", text, flags=re.IGNORECASE | re.DOTALL)
         if m2:

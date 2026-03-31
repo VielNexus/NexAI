@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
 
 from sol.config import load_config
 from sol.core.action_policy import ActionSelectionPolicy
@@ -16,6 +17,8 @@ from sol.jobs.storage import JobStore
 from sol.plugins.manager import PluginManager
 from sol.runtime.paths import build_runtime_paths, ensure_runtime_dirs
 from sol.skills.manager import SkillManager
+from sol.core.unsafe_mode import disable as disable_unsafe
+from sol.core.unsafe_mode import enable as enable_unsafe
 from sol.tools.base import Tool
 from sol.tools.fs import FsWriteTool
 from sol.tools.registry import ToolRegistry
@@ -70,6 +73,17 @@ def _build_agent(tmp_path: Path) -> tuple[Agent, ToolRegistry, object, object]:
     registry.register(WebFetchLikeTool())
     agent = Agent.create(ctx=ctx, tools=registry)
     return agent, registry, cfg, runtime_paths
+
+
+def _prepare_fs_write_agent(tmp_path: Path) -> tuple[Agent, Path]:
+    agent, registry, _cfg, _runtime_paths = _build_agent(tmp_path)
+    work_dir = agent.ctx.cfg.paths.working_dir.resolve(strict=False)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    object.__setattr__(agent.ctx.cfg.fs, "allowed_roots", (work_dir,))
+    object.__setattr__(agent.ctx.cfg.fs, "deny_drive_letters", tuple())
+    object.__setattr__(agent.ctx.cfg.fs, "denied_substrings", tuple())
+    registry.register(FsWriteTool())
+    return agent, work_dir
 
 
 def test_run_tool_and_execute_share_working_memory(tmp_path: Path) -> None:
@@ -159,27 +173,54 @@ def test_memory_promotion_policy_filters_transient_noise(tmp_path: Path, monkeyp
     assert captured == ["web.fetch"]
 
 
-def test_chat_executes_relative_file_write_request(tmp_path: Path) -> None:
-    agent, registry, _cfg, _runtime_paths = _build_agent(tmp_path)
-    work_dir = agent.ctx.cfg.paths.working_dir.resolve(strict=False)
-    work_dir.mkdir(parents=True, exist_ok=True)
-    object.__setattr__(agent.ctx.cfg.fs, "allowed_roots", (work_dir,))
-    object.__setattr__(agent.ctx.cfg.fs, "deny_drive_letters", tuple())
-    object.__setattr__(agent.ctx.cfg.fs, "denied_substrings", tuple())
-    registry.register(FsWriteTool())
+@pytest.mark.parametrize(
+    ("prompt", "expected_name", "expected_content"),
+    [
+        ("create a file named demo.txt with content hello", "demo.txt", "hello"),
+        ('create a new file called pythoncode.py with content print("hello")', "pythoncode.py", 'print("hello")'),
+        ('create TimeZone.py and put this in it: print("hello")', "TimeZone.py", 'print("hello")'),
+        ("create a file named notes.md", "notes.md", ""),
+    ],
+)
+def test_chat_honors_requested_filename_for_create_prompts(tmp_path: Path, prompt: str, expected_name: str, expected_content: str) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
 
     result = agent.chat(
-        user_message="create demo.txt with content hello",
+        user_message=prompt,
         provider="stub",
         model="stub",
         thread_id="thread-1",
     )
 
-    created = work_dir / "demo.txt"
+    created = work_dir / expected_name
     assert created.exists()
-    assert created.read_text(encoding="utf-8") == "hello"
+    assert created.read_text(encoding="utf-8") == expected_content
+    assert not (work_dir / "named").exists()
     assert result.ok is True
     assert result.tool_results
     assert result.tool_results[0].tool == "fs.write_text"
     assert result.tool_results[0].output["path"] == str(created)
     assert "Tool execution results:" in result.text
+
+
+def test_chat_edit_replaces_existing_file_contents(tmp_path: Path) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
+    target = work_dir / "demo.txt"
+    target.write_text("old value", encoding="utf-8")
+    enable_unsafe("thread-1", reason="Allow overwrite in test", user="tester", cfg=agent.ctx.cfg)
+    try:
+        result = agent.chat(
+            user_message="edit demo.txt and replace its contents with hello again",
+            provider="stub",
+            model="stub",
+            thread_id="thread-1",
+        )
+    finally:
+        disable_unsafe("thread-1", reason="Reset test state", user="tester", cfg=agent.ctx.cfg)
+
+    assert target.exists()
+    assert target.read_text(encoding="utf-8") == "hello again"
+    assert result.ok is True
+    assert result.tool_results
+    assert result.tool_results[0].tool == "fs.write_text"
+    assert result.tool_results[0].output["path"] == str(target)
