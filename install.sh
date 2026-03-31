@@ -155,7 +155,7 @@ build_solweb() {
     return 0
   fi
   info "Installing SolWeb dependencies..."
-  npm --prefix "$app_root/SolWeb" ci
+  npm --prefix "$app_root/SolWeb" install
   info "Building SolWeb production assets..."
   npm --prefix "$app_root/SolWeb" run build
 }
