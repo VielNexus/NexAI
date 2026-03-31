@@ -104,6 +104,7 @@ class StatusResponse(BaseModel):
     ok: bool = True
     name: str = "Sol API"
     ts: float
+    auth_enabled: bool
     chat_provider: str
     chat_model: str
     chat_ready: bool
@@ -176,6 +177,7 @@ def status(refresh: bool = Query(False)) -> StatusResponse:
 
     return StatusResponse(
         ts=time.time(),
+        auth_enabled=bool(config.auth_enabled),
         chat_provider=provider,
         chat_model=model,
         chat_ready=chat_ready,

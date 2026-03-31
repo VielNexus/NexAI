@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel, Field
 
 from sol_api.auth import AuthIdentity, bearer_token_from_request, require_api_auth, session_store, verify_credentials
+from sol_api.config import config
 
 router = APIRouter(tags=["auth"])
 
@@ -37,6 +38,10 @@ class LogoutResponse(BaseModel):
 
 @router.post("/auth/login", response_model=LoginResponse)
 def login(body: LoginRequest = Body(...)) -> LoginResponse:
+    if not config.auth_enabled:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=409, detail="Authentication is disabled for this install.")
     user_id = verify_credentials(body.username, body.password)
     if not user_id:
         from fastapi import HTTPException

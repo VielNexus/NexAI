@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from sol.install.models import ApiRuntimeConfig, InstallConfig, InstallProfile, ServiceMode, WebRuntimeConfig
+from sol.install.models import ApiRuntimeConfig, AuthRuntimeConfig, InstallConfig, InstallProfile, ServiceMode, WebRuntimeConfig
 from sol.install.ollama import DEFAULT_OLLAMA_BASE_URL, normalize_ollama_base_url
 
 
@@ -39,6 +39,9 @@ def load_install_config(path: Path | None = None) -> InstallConfig:
             host=str(data.get("web", {}).get("host", "127.0.0.1")),
             port=int(data.get("web", {}).get("port", 5173)),
             open_browser=bool(data.get("web", {}).get("open_browser", False)),
+        ),
+        auth=AuthRuntimeConfig(
+            enabled=bool(data.get("auth", {}).get("enabled", False)),
         ),
     )
 

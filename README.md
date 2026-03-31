@@ -60,6 +60,7 @@ http://127.0.0.1:5173
 
 Notes:
 
+- Fresh local installs default to local-first mode with login disabled.
 - The default model provider is Ollama at `http://127.0.0.1:11434`
 - If `~/.local/bin` is not on your `PATH`, add:
 
@@ -72,6 +73,24 @@ Repo-local installs are still supported from a checked-out bundle:
 ```bash
 ./install-sol.sh
 ```
+
+## Auth Mode
+
+Fresh local/demo installs now default to no-login local mode.
+
+- Persistent install/runtime flag: `auth.enabled`
+- Managed installs store it in `~/.config/sol/install.json` and mirror it into `~/.local/share/sol/config/sol.toml`
+- Direct API override: `SOL_AUTH_ENABLED=false|true`
+
+When `auth.enabled` is `false`, the backend accepts the local app flow without login and SolWeb does not show the sign-in gate.
+
+To enable auth later:
+
+1. Set `auth.enabled` to `true` in `~/.config/sol/install.json`.
+2. Restart NexAI so it rewrites runtime config and restarts the API with auth enabled.
+3. Set credentials with `SOL_AUTH_USER` plus `SOL_AUTH_PASSWORD` or `SOL_AUTH_PASSWORD_SHA256`.
+
+If you are running the API directly outside the managed installer flow, set `SOL_AUTH_ENABLED=true` before startup.
 
 ## Platform Support
 

@@ -31,5 +31,9 @@ class SessionTracker:
         thread_id, _ts = entry
         return thread_id
 
+    def reset_for_tests(self) -> None:
+        with self._lock:
+            self._active_thread_by_user.clear()
+
 
 session_tracker = SessionTracker()

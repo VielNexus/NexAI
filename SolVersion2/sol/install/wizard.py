@@ -8,7 +8,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from sol.install.models import ApiRuntimeConfig, InstallConfig, InstallProfile, ServiceMode, WebRuntimeConfig
+from sol.install.models import ApiRuntimeConfig, AuthRuntimeConfig, InstallConfig, InstallProfile, ServiceMode, WebRuntimeConfig
 from sol.install.local_profile import LocalProfileSelection, build_local_profile
 from sol.install.ollama import (
     DEFAULT_OLLAMA_BASE_URL,
@@ -185,6 +185,7 @@ def build_install_config(
             port=int(web_port),
             open_browser=False,
         ),
+        auth=AuthRuntimeConfig(enabled=False),
     )
 
 
@@ -622,6 +623,7 @@ def render_setup_summary(
         f"- Working directory: {config.working_dir}",
         f"- Install profile: {config.profile.value}",
         f"- Model provider: {config.model_provider}",
+        f"- API auth: {'enabled' if config.auth.enabled else 'disabled (local-first default)'}",
         f"- Ollama endpoint: {config.ollama_base_url}" if config.model_provider == "ollama" else None,
         f"- Managed runtime: {managed_runtime_path}" if managed_runtime_path else None,
         f"- CLI launcher: {launcher_path}" if launcher_path else None,

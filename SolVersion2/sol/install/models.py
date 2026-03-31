@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -34,6 +34,11 @@ class ApiRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class AuthRuntimeConfig:
+    enabled: bool = False
+
+
+@dataclass(frozen=True)
 class InstallConfig:
     schema_version: int
     install_name: str
@@ -47,6 +52,7 @@ class InstallConfig:
     ollama_base_url: str
     api: ApiRuntimeConfig
     web: WebRuntimeConfig
+    auth: AuthRuntimeConfig = field(default_factory=AuthRuntimeConfig)
 
     def to_dict(self) -> dict:
         data = asdict(self)

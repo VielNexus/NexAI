@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sol_api.app import create_app
 from sol_api.auth import session_store
 from sol_api.config import config
+from sol_api.rag.session import session_tracker
 import sol_api.routes.settings as settings_route
 from sol_api.routes.settings import SettingsModel
 
@@ -28,6 +29,7 @@ def test_chat_prefers_solv2_runtime_path(monkeypatch, tmp_path) -> None:
     with settings_route._CACHE_LOCK:
         settings_route._CACHED_SETTINGS = None
     session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
 
     class _FakeAudit:
         def tail(self, limit: int = 50):
@@ -66,6 +68,7 @@ def test_runtime_state_exposes_working_memory_snapshot(monkeypatch, tmp_path) ->
     with settings_route._CACHE_LOCK:
         settings_route._CACHED_SETTINGS = None
     session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
 
     class _FakeHandle:
         pass

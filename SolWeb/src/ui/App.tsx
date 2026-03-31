@@ -103,6 +103,7 @@ function isEditableElement(element: Element | null): boolean {
 
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(() => loadAuth());
+  const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
   const [activeView, setActiveView] = useState<"chat" | "settings" | "customization">("chat");
   const [loginUser, setLoginUser] = useState("nexus");
   const [loginPass, setLoginPass] = useState("");
@@ -123,6 +124,7 @@ export function App() {
   const [lastProviderError, setLastProviderError] = useState<ProviderErrorDetail | null>(null);
   const [appSettings, setAppSettings] = useState<SolSettings>(DEFAULT_SOL_SETTINGS);
   const [pendingLayoutSync, setPendingLayoutSync] = useState(() => loadPendingLayoutSave());
+  const sessionReady = authEnabled === false || Boolean(auth);
 
   const lastServerSelectionRef = useRef<{ provider: string; model: string }>({ provider: "stub", model: "stub" });
   const selectionPersistRef = useRef<Promise<void> | null>(null);
@@ -239,7 +241,7 @@ export function App() {
 
   useEffect(() => {
     const tid = activeThread?.id ?? null;
-    if (!auth || !tid) {
+    if (!sessionReady || !tid) {
       setUnsafeStatus(null);
       return;
     }
@@ -255,7 +257,7 @@ export function App() {
     return () => {
       canceled = true;
     };
-  }, [activeThread?.id, auth]);
+  }, [activeThread?.id, sessionReady]);
 
   const persistThreadProjectMap = useCallback(() => {
     localStorage.setItem(config.threadProjectMapKey, JSON.stringify(threadProjectMapRef.current));
@@ -328,7 +330,10 @@ export function App() {
   }, [chatModel, chatProvider, modelOptions.isSelectedValid, modelOptions.ollama, modelOptions.openai, modelOptions.refreshing, modelOptions.selectedKey, modelsError, ollamaBaseUrl]);
 
   const loadAppSettings = useCallback(async () => {
-    if (!auth) {
+    if (authEnabled === null) {
+      return;
+    }
+    if (authEnabled && !auth) {
       setAppSettings(DEFAULT_SOL_SETTINGS);
       setPendingLayoutSync(loadPendingLayoutSave());
       return;
@@ -344,7 +349,7 @@ export function App() {
       setPendingLayoutSync(pending);
       setAppSettings(applyPendingLayoutToSettings(DEFAULT_SOL_SETTINGS, pending));
     }
-  }, [auth]);
+  }, [auth, authEnabled]);
 
   const applySettings = useCallback((settings: SolSettings) => {
     const next = {
@@ -373,6 +378,7 @@ export function App() {
         const res = await getStatus(controller.signal);
         setStatusOk(res.ok);
         setStatusName(res.name || "Connected");
+        setAuthEnabled(res.auth_enabled !== false);
         const serverProvider = res.chat_provider ?? "stub";
         const serverModel = res.chat_model ?? "stub";
         const last = lastServerSelectionRef.current;
@@ -412,8 +418,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!statusOk || !auth) {
-      if (!auth) {
+    if (authEnabled !== false || !auth) return;
+    clearAuth();
+    setAuth(null);
+    setLoginPass("");
+    setLoginError(null);
+  }, [auth, authEnabled]);
+
+  useEffect(() => {
+    if (!statusOk || !sessionReady) {
+      if (!sessionReady) {
         setThreads([]);
         setActiveThread(null);
       }
@@ -433,10 +447,14 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [auth, statusOk]);
+  }, [sessionReady, statusOk]);
 
   useEffect(() => {
     const onAuthInvalid = () => {
+      if (authEnabled === false) {
+        clearAuth();
+        return;
+      }
       clearAuth();
       setAuth(null);
       setActiveThread(null);
@@ -446,7 +464,7 @@ export function App() {
     };
     window.addEventListener("solweb:auth-invalid", onAuthInvalid);
     return () => window.removeEventListener("solweb:auth-invalid", onAuthInvalid);
-  }, []);
+  }, [authEnabled]);
 
   useEffect(() => {
     const onPendingLayoutChanged = () => setPendingLayoutSync(loadPendingLayoutSave());
@@ -473,7 +491,7 @@ export function App() {
     ({ force = false }: { force?: boolean } = {}) => {
       const target = textareaRef.current;
       if (!target) return;
-      if (activeView !== "chat" || !auth || !statusOk || navOpen || sending) return;
+      if (activeView !== "chat" || !sessionReady || !statusOk || navOpen || sending) return;
       if (target.disabled) return;
       if (document.querySelector(".nexus-dropdown--open, .nexus-context-menu")) return;
 
@@ -486,7 +504,7 @@ export function App() {
 
       target.focus({ preventScroll: true });
     },
-    [activeView, auth, isMobile, navOpen, sending, statusOk]
+    [activeView, isMobile, navOpen, sending, sessionReady, statusOk]
   );
 
   const scheduleComposerFocus = useCallback(
@@ -690,7 +708,7 @@ export function App() {
   }, [applySettings]);
 
   useEffect(() => {
-    if (!auth || !statusOk || !pendingLayoutSync) return;
+    if (!sessionReady || !statusOk || !pendingLayoutSync) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -708,7 +726,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [appSettings, auth, handleSettingsSaved, pendingLayoutSync, statusOk]);
+  }, [appSettings, handleSettingsSaved, pendingLayoutSync, sessionReady, statusOk]);
 
   const onFeedScroll = useCallback(() => {
     const el = feedRef.current;
@@ -1149,7 +1167,7 @@ export function App() {
         <Panel className="rounded-[1.4rem] bg-slate-950/54 p-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <div className={tokens.smallLabel}>Pages</div>
-            {auth ? (
+            {authEnabled && auth ? (
               <button className={tokens.button} onClick={signOut} title="Sign out">
                 Sign out
               </button>
@@ -1197,7 +1215,8 @@ export function App() {
               Customization
             </button>
           </div>
-          {auth ? <div className="mt-2 text-xs text-slate-500">Signed in as {auth.user}</div> : null}
+          {authEnabled === false ? <div className="mt-2 text-xs text-slate-500">Local mode active</div> : null}
+          {authEnabled !== false && auth ? <div className="mt-2 text-xs text-slate-500">Signed in as {auth.user}</div> : null}
         </Panel>
 
         {!statusOk && (
@@ -1245,7 +1264,7 @@ export function App() {
       data-accent-intensity={accentIntensity}
       data-density-mode={densityMode}
     >
-      {!auth ? (
+      {authEnabled === true && !auth ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/92 p-4 backdrop-blur-sm">
           <Panel className="w-full max-w-md p-5">
             <div className="flex items-center gap-3">

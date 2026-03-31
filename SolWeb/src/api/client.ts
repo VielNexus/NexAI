@@ -4,6 +4,7 @@ export type StatusResponse = {
   ok: boolean;
   name: string;
   ts: number;
+  auth_enabled?: boolean;
   chat_provider?: string;
   chat_model?: string;
   chat_ready?: boolean;

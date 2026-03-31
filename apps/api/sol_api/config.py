@@ -9,6 +9,7 @@ from sol_api.ollama import normalize_ollama_base_url
 
 
 _LEGACY_DEFAULT_PASSWORD_SHA256 = "5d197aa5a9be2caa46430f0dae3501f0f616d753491b7640fbd8c57267883943"
+_TRUE_VALUES = ("1", "true", "yes", "on")
 
 
 class ApiConfig:
@@ -64,7 +65,7 @@ class ApiConfig:
         self.threads_dir = data_dir / "threads"
         self.threads_dir.mkdir(parents=True, exist_ok=True)
         self.thread_title_max = int(os.getenv("SOL_THREAD_TITLE_MAX", "64"))
-        self.auth_enabled = os.getenv("SOL_AUTH_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+        self.auth_enabled = self._load_auth_enabled()
         self.auth_session_ttl_s = max(300, int(os.getenv("SOL_AUTH_SESSION_TTL_S", "604800")))
         self.auth_users = self._load_auth_users()
 
@@ -147,6 +148,12 @@ class ApiConfig:
         # Disabled by default because many models do not reliably follow tool schemas.
         self.ollama_tools_enabled = os.getenv("SOL_OLLAMA_TOOLS_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
         self.ollama_tool_max_iters = int(os.getenv("SOL_OLLAMA_TOOL_MAX_ITERS", "4"))
+
+    def _load_auth_enabled(self) -> bool:
+        raw_env = os.getenv("SOL_AUTH_ENABLED")
+        if raw_env is not None and raw_env.strip():
+            return raw_env.strip().lower() in _TRUE_VALUES
+        return False
 
     def _load_auth_users(self) -> dict[str, str]:
         raw_users = (os.getenv("SOL_AUTH_USERS_JSON") or "").strip()

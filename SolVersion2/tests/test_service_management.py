@@ -45,6 +45,11 @@ def _config(tmp_path: Path) -> object:
     )
 
 
+def test_build_install_config_defaults_auth_disabled(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    assert config.auth.enabled is False
+
+
 def test_detect_platform_reports_present_but_unusable(monkeypatch) -> None:
     monkeypatch.setattr("platform.system", lambda: "Linux")
     monkeypatch.setattr("platform.release", lambda: "6.6.0-microsoft-standard-WSL2")
