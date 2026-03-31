@@ -45,7 +45,8 @@ usage() {
 Usage: ./install-sol.sh [--skip-setup] [-- <sol setup args...>]
 
 Bootstraps the NexAI CLI into a lightweight user-local environment and installs
-an end-user launcher at ~/.local/bin/sol.
+an end-user launcher at ~/.local/bin/nexai plus a compatibility alias at
+~/.local/bin/sol.
 
 By default this script runs `sol setup` after bootstrap install.
 Use --skip-setup to stop after installing the launcher.

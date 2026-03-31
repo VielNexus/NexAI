@@ -14,13 +14,19 @@ Key capabilities:
 
 ## Bootstrap Install
 
-Linux/WSL repo installs are intended to start with:
+For a fresh Ubuntu 24 machine, use the repo-root installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
+```
+
+That wrapper installs system prerequisites, clones the repo, builds `SolWeb/dist`, and then hands off to the bundle-local bootstrap script:
 
 ```bash
 ./install-sol.sh
 ```
 
-That script:
+The bundle-local bootstrap step:
 
 - creates a lightweight bootstrap virtual environment automatically
 - installs the NexAI CLI into that bootstrap environment

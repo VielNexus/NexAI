@@ -23,26 +23,55 @@ NexAI is built to run as a practical local system rather than a cloud-only assis
 - `SolWeb/`: React/Vite web UI
 - `apps/desktop/`: desktop client work
 
-## Install Note
+## Ubuntu 24 Install
 
-Linux/WSL bootstrap installs are now intended to start with:
+Fresh Ubuntu 24 installs are intended to start with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
+```
+
+That root installer:
+
+- installs required Ubuntu packages when they are missing
+- clones NexAI into `~/.local/share/nexai/app`
+- builds `SolWeb/dist`
+- bootstraps the NexAI CLI into `~/.local/bin/nexai`
+- provisions the managed runtime under `~/.local/share/sol`
+
+The installer uses the existing product-style runtime model:
+
+- app bundle: `~/.local/share/nexai/app`
+- bootstrap launcher: `~/.local/bin/nexai`
+- managed runtime: `~/.local/share/sol`
+
+After install:
+
+```bash
+~/.local/bin/nexai start
+~/.local/bin/nexai status
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5173
+```
+
+Notes:
+
+- The default model provider is Ollama at `http://127.0.0.1:11434`
+- If `~/.local/bin` is not on your `PATH`, add:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Repo-local installs are still supported from a checked-out bundle:
 
 ```bash
 ./install-sol.sh
 ```
-
-That bootstrap step creates a lightweight user-local CLI environment and installs `~/.local/bin/nexai` plus a legacy compatibility alias at `~/.local/bin/sol`. After bootstrap install, NexAI keeps its managed runtime model:
-
-- bootstrap environment: CLI + installer entrypoint
-- managed runtime: created later by `nexai setup` under the chosen `runtime_root/venv`
-
-The future release flow is intended to use the same bootstrap model via a hosted installer script:
-
-```bash
-curl -fsSL <install-url> | bash
-```
-
-Built frontend assets are still expected to ship with release bundles rather than being rebuilt on end-user machines for normal standard installs.
 
 ## Platform Support
 
