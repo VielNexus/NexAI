@@ -90,3 +90,5 @@ Python components live primarily under `SolVersion2/` and `apps/api/`. The web U
 ## License
 
 Apache-2.0
+
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
