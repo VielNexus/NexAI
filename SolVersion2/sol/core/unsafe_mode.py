@@ -13,6 +13,8 @@ from typing import Any
 
 _CURRENT_THREAD_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("sol_current_thread_id", default=None)
 _CURRENT_USER: contextvars.ContextVar[str] = contextvars.ContextVar("sol_current_user", default="local-user")
+_CURRENT_UNSAFE_ENABLED: contextvars.ContextVar[bool | None] = contextvars.ContextVar("sol_current_unsafe_enabled", default=None)
+_UNSET = object()
 
 _LOCK = threading.Lock()
 
@@ -48,17 +50,27 @@ def _default_user() -> str:
     return "local-user"
 
 
-def set_request_context(*, thread_id: str | None, user: str | None) -> tuple[contextvars.Token, contextvars.Token]:
+def set_request_context(
+    *,
+    thread_id: str | None,
+    user: str | None,
+    unsafe_enabled: bool | None | object = _UNSET,
+) -> tuple[contextvars.Token, contextvars.Token, contextvars.Token]:
     """Set request/tool execution context for thread-scoped policy checks."""
     t1 = _CURRENT_THREAD_ID.set((thread_id or "").strip() or None)
     t2 = _CURRENT_USER.set((user or "").strip() or _default_user())
-    return t1, t2
+    if unsafe_enabled is _UNSET:
+        t3 = _CURRENT_UNSAFE_ENABLED.set(_CURRENT_UNSAFE_ENABLED.get())
+    else:
+        t3 = _CURRENT_UNSAFE_ENABLED.set(None if unsafe_enabled is None else bool(unsafe_enabled))
+    return t1, t2, t3
 
 
-def reset_request_context(tokens: tuple[contextvars.Token, contextvars.Token]) -> None:
-    t1, t2 = tokens
+def reset_request_context(tokens: tuple[contextvars.Token, contextvars.Token, contextvars.Token]) -> None:
+    t1, t2, t3 = tokens
     _CURRENT_THREAD_ID.reset(t1)
     _CURRENT_USER.reset(t2)
+    _CURRENT_UNSAFE_ENABLED.reset(t3)
 
 
 def current_thread_id() -> str | None:
@@ -71,6 +83,11 @@ def current_user() -> str:
 
 def is_unsafe_enabled(thread_id: str | None = None) -> bool:
     th = (thread_id or "").strip() or current_thread_id()
+    req = _CURRENT_UNSAFE_ENABLED.get()
+    if req is not None:
+        cur = current_thread_id()
+        if not th or (cur and th == cur):
+            return bool(req)
     if not th:
         return False
     with _LOCK:

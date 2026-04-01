@@ -37,6 +37,7 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: str | None = None
     response_mode: str = "chat"
+    unsafe_enabled: bool | None = None
 
 
 class RetrievedChunk(BaseModel):
@@ -792,10 +793,23 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
         raise HTTPException(status_code=400, detail="Ollama provider selected but no model is configured.")
 
     try:
+        from sol.core.unsafe_mode import is_unsafe_enabled, reset_request_context, set_request_context
+
         inferred_thread_id = requested_thread_id or session_tracker.get_active_thread(user_id or "")
         if inferred_thread_id and user_id:
             ensure_thread_owner(inferred_thread_id, owner_id=user_id)
         h, agent = _get_agent_pair(inferred_thread_id, user=(user_id or "unknown"))
+        agent_ctx = getattr(agent, "ctx", None)
+        effective_thread_id = inferred_thread_id or getattr(agent_ctx, "web_session_thread_id", None)
+        effective_user = (user_id or getattr(agent_ctx, "web_session_user", None) or "unknown")
+        backend_unsafe_enabled = bool(effective_thread_id and is_unsafe_enabled(effective_thread_id))
+        request_unsafe_enabled = backend_unsafe_enabled if request.unsafe_enabled is None else bool(request.unsafe_enabled and effective_thread_id)
+        if agent_ctx is not None:
+            setattr(agent_ctx, "web_session_thread_id", effective_thread_id)
+            setattr(agent_ctx, "web_session_user", effective_user)
+            setattr(agent_ctx, "request_unsafe_enabled", request_unsafe_enabled)
+            setattr(agent_ctx, "request_agent_mode", "unsafe" if request_unsafe_enabled else str(getattr(agent_ctx.cfg.agent, "mode", "supervised")))
+        tokens = set_request_context(thread_id=effective_thread_id, user=effective_user, unsafe_enabled=request_unsafe_enabled)
         handle_cfg = getattr(h, "cfg", None)
         if provider == "ollama" and isinstance(getattr(handle_cfg, "llm", None), dict):
             llm_cfg = handle_cfg.llm
@@ -803,13 +817,16 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             ollama_cfg["base_url"] = effective_ollama_base_url(settings)
             ollama_cfg["timeout_s"] = effective_ollama_request_timeout_s(settings)
             llm_cfg["ollama"] = ollama_cfg
-        res = agent.chat(
-            user_message=request.message,
-            provider=provider,
-            model=model,
-            thread_id=inferred_thread_id,
-            response_mode=response_mode,
-        )
+        try:
+            res = agent.chat(
+                user_message=request.message,
+                provider=provider,
+                model=model,
+                thread_id=effective_thread_id,
+                response_mode=response_mode,
+            )
+        finally:
+            reset_request_context(tokens)
         retrieved = [
             RetrievedChunk(
                 text=ch.text,

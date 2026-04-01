@@ -34,3 +34,5 @@ class SolContext:
     job_store: Any | None = None
     working_memory_manager: Any | None = None
     working_memory: Any | None = None
+    request_unsafe_enabled: bool | None = None
+    request_agent_mode: str | None = None

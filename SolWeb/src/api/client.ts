@@ -385,11 +385,13 @@ export async function saveSettings(settings: SolSettings): Promise<SolSettings> 
 export async function sendChatMessage(
   message: string,
   threadId?: string,
-  responseMode: ResponseMode = "chat"
+  responseMode: ResponseMode = "chat",
+  unsafeEnabled?: boolean
 ): Promise<ChatResponse & { retrieved?: RetrievedChunk[] | null; audit_tail?: AuditEntry[] | null }> {
   const body: Record<string, unknown> = { message };
   if (threadId) body.thread_id = threadId;
   if (responseMode) body.response_mode = responseMode;
+  if (typeof unsafeEnabled === "boolean") body.unsafe_enabled = unsafeEnabled;
   const res = await fetch(`${config.apiBase}/v1/chat`, {
     method: "POST",
     headers: jsonHeaders(),

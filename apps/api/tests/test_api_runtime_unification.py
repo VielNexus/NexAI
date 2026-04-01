@@ -210,6 +210,90 @@ def test_chat_live_route_honors_requested_paths_and_avoids_helper_words(monkeypa
     assert not (work_dir / "at").exists()
 
 
+def test_chat_live_route_request_unsafe_enabled_allows_overwrite(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, work_dir = _build_live_agent(tmp_path)
+    target = work_dir / "demo.txt"
+    target.write_text("before", encoding="utf-8")
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/v1/chat",
+        json={
+            "message": "edit demo.txt and replace its contents with hello again",
+            "thread_id": None,
+            "unsafe_enabled": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "fs.write_text: OK" in payload["content"]
+    assert "unsafe_blocked" not in payload["content"]
+    assert target.read_text(encoding="utf-8") == "hello again"
+
+
+def test_chat_live_route_request_unsafe_disabled_blocks_overwrite(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, work_dir = _build_live_agent(tmp_path)
+    target = work_dir / "demo.txt"
+    target.write_text("before", encoding="utf-8")
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/v1/chat",
+        json={
+            "message": "edit demo.txt and replace its contents with hello again",
+            "thread_id": None,
+            "unsafe_enabled": False,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "fs.write_text: FAILED" in payload["content"]
+    assert "unsafe_blocked" in payload["content"]
+    assert target.read_text(encoding="utf-8") == "before"
+
+
 def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(config, "auth_enabled", False)
     monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")

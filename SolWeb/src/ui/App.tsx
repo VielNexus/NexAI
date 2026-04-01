@@ -826,7 +826,7 @@ export function App() {
         }
       }
 
-      const reply = await sendChatMessage(text, t1.id);
+      const reply = await sendChatMessage(text, t1.id, "chat", Boolean(unsafeStatus?.unsafe_enabled));
       assistantReplyReceived = true;
       setLastProviderError(null);
       setLastRetrieved(Array.isArray(reply.retrieved) ? reply.retrieved : []);
