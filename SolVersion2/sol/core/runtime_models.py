@@ -61,7 +61,9 @@ class PendingAction:
     tool_name: str
     known_args: dict[str, Any] = field(default_factory=dict)
     missing_arguments: tuple[str, ...] = tuple()
+    filled_arguments: tuple[str, ...] = tuple()
     clarification_prompt: str = ""
+    hints: dict[str, Any] = field(default_factory=dict)
     created_at: float | None = None
     thread_id: str | None = None
     source_turn_text: str | None = None

@@ -703,33 +703,53 @@ class Agent:
         *,
         assessment: RequestAssessment,
         user_text: str,
-        clarification_prompt: str,
         thread_id: str | None,
     ) -> PendingAction | None:
         missing = tuple(getattr(assessment, "missing_arguments", ()) or ())
-        if not bool(getattr(assessment, "requires_tools", False)) or len(missing) != 1:
+        if not bool(getattr(assessment, "requires_tools", False)) or not missing:
             return None
         if assessment.intent != "file_write":
             return None
         known_args: dict[str, Any] = {}
+        hints: dict[str, Any] = {}
         path = self._extract_write_path(user_text)
         if path:
             known_args["path"] = path
         content = self._resolved_write_content(user_text, allow_artifact_context=True)
         if content is not None:
             known_args["content"] = content
-        if not known_args and missing == ("target path",):
+        if self._is_python_file_request(user_text):
+            hints["expected_extension"] = ".py"
+            hints["file_label"] = "Python file"
+        filled = tuple(name for name in ("path", "content") if name in known_args)
+        if not known_args and not hints:
             return None
-        return PendingAction(
+        pending = PendingAction(
             intent=assessment.intent,
             mode=assessment.mode,
             tool_name=self._normalize_tool_name("fs.write_text"),
             known_args=known_args,
             missing_arguments=missing,
-            clarification_prompt=(clarification_prompt or "").strip(),
+            filled_arguments=filled,
+            clarification_prompt="",
+            hints=hints,
             created_at=time.time(),
             thread_id=thread_id,
             source_turn_text=(user_text or "").strip() or None,
+        )
+        prompt = self._pending_action_clarification_prompt(pending)
+        return PendingAction(
+            intent=pending.intent,
+            mode=pending.mode,
+            tool_name=pending.tool_name,
+            known_args=dict(pending.known_args),
+            missing_arguments=pending.missing_arguments,
+            filled_arguments=pending.filled_arguments,
+            clarification_prompt=prompt,
+            hints=dict(pending.hints),
+            created_at=pending.created_at,
+            thread_id=pending.thread_id,
+            source_turn_text=pending.source_turn_text,
         )
 
     def _is_pending_action_cancel(self, text: str) -> bool:
@@ -768,29 +788,123 @@ class Agent:
             return True
         return False
 
-    def _resume_pending_action(self, text: str, *, pending: PendingAction) -> tuple[RequestAssessment, Plan] | None:
-        if pending.intent != "file_write" or pending.tool_name != self._normalize_tool_name("fs.write_text"):
+    def _pending_argument_priority(self, pending: PendingAction) -> tuple[str, ...]:
+        if pending.intent == "file_write":
+            ordered = ["target path"]
+            if "replacement content" in pending.missing_arguments:
+                ordered.append("replacement content")
+            if "file content" in pending.missing_arguments:
+                ordered.append("file content")
+            for item in pending.missing_arguments:
+                if item not in ordered:
+                    ordered.append(item)
+            return tuple(item for item in ordered if item in pending.missing_arguments)
+        return tuple(getattr(pending, "missing_arguments", ()) or ())
+
+    def _next_pending_argument(self, pending: PendingAction) -> str | None:
+        ordered = self._pending_argument_priority(pending)
+        return ordered[0] if ordered else None
+
+    def _is_python_file_request(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(
+            phrase in low
+            for phrase in (
+                "create a python file",
+                "create python file",
+                "make a python file",
+                "make python file",
+                "python file",
+                "python script",
+            )
+        )
+
+    def _pending_action_clarification_prompt(self, pending: PendingAction) -> str:
+        next_arg = self._next_pending_argument(pending)
+        if pending.intent == "file_write":
+            if next_arg == "target path":
+                label = str((pending.hints or {}).get("file_label") or "").strip()
+                if label:
+                    return f"What should I name the {label}?"
+                if self._artifact_context() is not None:
+                    return "What filename should I save this as?"
+                return "What filename should I write to?"
+            if next_arg in {"file content", "replacement content"}:
+                return "What content should I write to the file?"
+        return str(getattr(pending, "clarification_prompt", "") or "I still need the missing information to continue.")
+
+    def _coerce_pending_write_path(self, text: str, *, pending: PendingAction) -> str | None:
+        raw = (text or "").strip().strip("\"'`").rstrip(".,;!?")
+        if not raw:
             return None
+        candidate = self._extract_write_path(raw)
+        if not candidate:
+            candidate = self._candidate_path_from_fragment(self._strip_file_intro_words(raw))
+        if not candidate and re.fullmatch(r"[A-Za-z0-9_.-]+", raw):
+            candidate = raw
+        expected_ext = str((pending.hints or {}).get("expected_extension") or "").strip()
+        if candidate and expected_ext and not Path(candidate).suffix:
+            candidate = candidate + expected_ext
+        if not candidate and expected_ext and re.fullmatch(r"[A-Za-z0-9_-]+", raw):
+            candidate = raw + expected_ext
+        return candidate
+
+    def _continue_pending_action(self, text: str, *, pending: PendingAction) -> dict[str, Any]:
+        if pending.intent != "file_write" or pending.tool_name != self._normalize_tool_name("fs.write_text"):
+            return {"kind": "unsupported"}
         known_args = dict(getattr(pending, "known_args", {}) or {})
+        filled = set(getattr(pending, "filled_arguments", ()) or ())
         missing = list(getattr(pending, "missing_arguments", ()) or ())
-        if "target path" in missing:
-            path = self._extract_write_path(text)
+        next_arg = self._next_pending_argument(pending)
+        if next_arg == "target path":
+            path = self._coerce_pending_write_path(text, pending=pending)
             if path:
                 known_args["path"] = path
+                filled.add("path")
                 missing = [item for item in missing if item != "target path"]
-        if any(item in {"file content", "replacement content"} for item in missing):
+            elif self._should_discard_pending_action(text, pending=pending):
+                return {"kind": "discard"}
+        elif next_arg in {"file content", "replacement content"}:
             if self._should_discard_pending_action(text, pending=pending):
-                return None
+                return {"kind": "discard"}
             reply = (text or "").strip()
             if reply:
                 known_args["content"] = reply
+                filled.add("content")
                 missing = [item for item in missing if item not in {"file content", "replacement content"}]
         if missing:
-            return None
+            updated = PendingAction(
+                intent=pending.intent,
+                mode=pending.mode,
+                tool_name=pending.tool_name,
+                known_args=known_args,
+                missing_arguments=tuple(missing),
+                filled_arguments=tuple(sorted(filled)),
+                clarification_prompt="",
+                hints=dict(getattr(pending, "hints", {}) or {}),
+                created_at=pending.created_at,
+                thread_id=pending.thread_id,
+                source_turn_text=pending.source_turn_text,
+            )
+            prompt = self._pending_action_clarification_prompt(updated)
+            updated = PendingAction(
+                intent=updated.intent,
+                mode=updated.mode,
+                tool_name=updated.tool_name,
+                known_args=dict(updated.known_args),
+                missing_arguments=updated.missing_arguments,
+                filled_arguments=updated.filled_arguments,
+                clarification_prompt=prompt,
+                hints=dict(updated.hints),
+                created_at=updated.created_at,
+                thread_id=updated.thread_id,
+                source_turn_text=updated.source_turn_text,
+            )
+            return {"kind": "clarify", "pending": updated, "prompt": prompt}
         path = str(known_args.get("path") or "").strip()
         content = known_args.get("content")
         if not path or content is None or not str(content).strip():
-            return None
+            return {"kind": "invalid"}
         assessment = RequestAssessment(
             mode=str(getattr(pending, "mode", "") or "transform"),
             intent=str(getattr(pending, "intent", "") or "file_write"),
@@ -812,7 +926,7 @@ class Agent:
                 ),
             )
         )
-        return assessment, plan
+        return {"kind": "execute", "assessment": assessment, "plan": plan}
 
     def _extract_drive_root(self, text: str) -> str | None:
         # Accept drive-root-like inputs even when there's no further path component.

@@ -50,9 +50,10 @@ class RuntimeOrchestrator:
                 if working_memory is not None:
                     working_memory.clear_unresolved()
                 return AgentResult(ok=True, plan=Plan(steps=tuple()), text=finalize_response_text(msg, response_mode=response_mode), tool_results=tuple(), retrieved=tuple(retrieved), context=context, sources=tuple(), verification_level=VerificationLevel.UNVERIFIED, verification=None)
-            resumed = self.agent._resume_pending_action(user_text, pending=pending)
-            if resumed is not None:
-                assessment, plan = resumed
+            continuation = self.agent._continue_pending_action(user_text, pending=pending)
+            if continuation.get("kind") == "execute":
+                assessment = continuation["assessment"]
+                plan = continuation["plan"]
                 decision = ActionDecision(
                     action="run_plan",
                     reason="Resuming pending tool action with supplied clarification.",
@@ -61,7 +62,15 @@ class RuntimeOrchestrator:
                 )
                 resumed_from_pending = True
                 self.agent._clear_pending_action()
-            elif self.agent._should_discard_pending_action(user_text, pending=pending):
+            elif continuation.get("kind") == "clarify":
+                updated_pending = continuation["pending"]
+                msg = str(continuation["prompt"])
+                self.agent._set_pending_action(updated_pending)
+                self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id, "pending_action_waiting": True})
+                if working_memory is not None:
+                    working_memory.note_unresolved(msg)
+                return AgentResult(ok=False, plan=Plan(steps=tuple()), text=finalize_response_text(msg, response_mode=response_mode), tool_results=tuple(), retrieved=tuple(retrieved), context=context, sources=tuple(), verification_level=VerificationLevel.UNVERIFIED, verification=None)
+            elif continuation.get("kind") == "discard" or self.agent._should_discard_pending_action(user_text, pending=pending):
                 self.agent._clear_pending_action()
                 pending = None
                 assessment = self.agent.assess_request(user_text)
@@ -74,7 +83,7 @@ class RuntimeOrchestrator:
                     assessment=assessment,
                 )
             else:
-                msg = str(getattr(pending, "clarification_prompt", "") or "I still need the missing information to continue.")
+                msg = str(getattr(pending, "clarification_prompt", "") or self.agent._pending_action_clarification_prompt(pending))
                 self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id, "pending_action_waiting": True})
                 if working_memory is not None:
                     working_memory.note_unresolved(msg)
@@ -116,26 +125,26 @@ class RuntimeOrchestrator:
             plan = RuntimePlan(steps=tuple(self.agent._plan_web_verify(user_text)))
 
         if decision.require_clarification:
-            if (
-                assessment.intent == "file_write"
-                and tuple(getattr(assessment, "missing_arguments", ()) or ()) == ("target path",)
-                and self.agent._artifact_context() is not None
-            ):
-                msg = "What filename should I save this as?"
-            elif assessment.intent == "file_write" and tuple(getattr(assessment, "missing_arguments", ()) or ()) in {("file content",), ("replacement content",)}:
-                msg = "What content should I write to the file?"
-            else:
-                msg = f"This request requires a tool or approval path that is currently unavailable.\n\nDetails: {decision.reason}"
             pending_action = self.agent._build_pending_action(
                 assessment=assessment,
                 user_text=user_text,
-                clarification_prompt=msg,
                 thread_id=thread_id,
             )
             if pending_action is not None:
                 self.agent._set_pending_action(pending_action)
+                msg = self.agent._pending_action_clarification_prompt(pending_action)
             elif not resumed_from_pending:
                 self.agent._clear_pending_action()
+                if (
+                    assessment.intent == "file_write"
+                    and tuple(getattr(assessment, "missing_arguments", ()) or ()) == ("target path",)
+                    and self.agent._artifact_context() is not None
+                ):
+                    msg = "What filename should I save this as?"
+                elif assessment.intent == "file_write" and tuple(getattr(assessment, "missing_arguments", ()) or ()) in {("file content",), ("replacement content",)}:
+                    msg = "What content should I write to the file?"
+                else:
+                    msg = f"This request requires a tool or approval path that is currently unavailable.\n\nDetails: {decision.reason}"
             self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id})
             if working_memory is not None:
                 working_memory.note_unresolved(decision.reason)

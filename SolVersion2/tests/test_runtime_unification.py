@@ -327,6 +327,43 @@ def test_pending_file_write_unrelated_follow_up_does_not_write(tmp_path: Path) -
     assert not (work_dir / "demos.txt").exists()
 
 
+def test_pending_python_file_write_guides_filename_then_content(tmp_path: Path) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
+
+    first = agent.chat(
+        user_message="create a python file",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+    assert first.ok is False
+    assert first.text == "What should I name the Python file?"
+
+    second = agent.chat(
+        user_message="demo",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+    assert second.ok is False
+    assert second.text == "What content should I write to the file?"
+    pending = agent._pending_action()
+    assert pending is not None
+    assert pending.known_args["path"].endswith("demo.py")
+
+    third = agent.chat(
+        user_message='print("hello")',
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+    target = work_dir / "demo.py"
+    assert third.ok is True
+    assert target.exists()
+    assert target.read_text(encoding="utf-8") == 'print("hello")'
+    assert agent._pending_action() is None
+
+
 def test_chat_edit_replaces_existing_file_contents(tmp_path: Path) -> None:
     agent, work_dir = _prepare_fs_write_agent(tmp_path)
     target = work_dir / "demo.txt"

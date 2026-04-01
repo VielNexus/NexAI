@@ -652,6 +652,49 @@ def test_chat_live_route_unrelated_follow_up_discards_pending_action(monkeypatch
     assert not (work_dir / "demos.txt").exists()
 
 
+def test_chat_live_route_pending_python_file_guides_then_executes(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    make_agent, work_dir, wm = _build_live_agent_factory(tmp_path)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+
+    client = TestClient(create_app())
+    first = client.post("/v1/chat", json={"message": "create a python file", "thread_id": None})
+    assert first.status_code == 200, first.text
+    assert first.json()["content"] == "What should I name the Python file?"
+
+    second = client.post("/v1/chat", json={"message": "demo", "thread_id": None})
+    assert second.status_code == 200, second.text
+    assert second.json()["content"] == "What content should I write to the file?"
+    pending = wm.for_scope(user_id="tester", thread_id="thread-1").pending_action
+    assert pending is not None
+    assert pending.known_args["path"].endswith("demo.py")
+
+    third = client.post("/v1/chat", json={"message": 'print("hello")', "thread_id": None})
+    assert third.status_code == 200, third.text
+    assert "fs.write_text: OK" in third.json()["content"]
+    assert (work_dir / "demo.py").read_text(encoding="utf-8") == 'print("hello")'
+    assert wm.for_scope(user_id="tester", thread_id="thread-1").pending_action is None
+
+
 def test_chat_live_route_explain_this_code_uses_artifact_context(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(config, "auth_enabled", False)
     monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
