@@ -55,6 +55,19 @@ class ArtifactContext:
 
 
 @dataclass(frozen=True)
+class PendingAction:
+    intent: str
+    mode: str
+    tool_name: str
+    known_args: dict[str, Any] = field(default_factory=dict)
+    missing_arguments: tuple[str, ...] = tuple()
+    clarification_prompt: str = ""
+    created_at: float | None = None
+    thread_id: str | None = None
+    source_turn_text: str | None = None
+
+
+@dataclass(frozen=True)
 class RequestAssessment:
     mode: str
     intent: str

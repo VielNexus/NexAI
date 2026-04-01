@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from sol.core.runtime_models import PendingAction
 
 
 @dataclass
@@ -25,6 +27,7 @@ class WorkingMemoryState:
     unresolved_items: list[str] = field(default_factory=list)
     constraints: list[str] = field(default_factory=list)
     summary: str = ""
+    pending_action: PendingAction | None = None
     last_updated: float = field(default_factory=time.time)
 
     def begin(self, *, goal: str, constraints: list[str] | None = None) -> None:
@@ -120,6 +123,14 @@ class WorkingMemoryState:
         self.summary = (summary or "").strip()
         self.last_updated = time.time()
 
+    def set_pending_action(self, pending: PendingAction | None) -> None:
+        self.pending_action = pending
+        self.last_updated = time.time()
+
+    def clear_pending_action(self) -> None:
+        self.pending_action = None
+        self.last_updated = time.time()
+
     def note_unresolved(self, item: str) -> None:
         text = (item or "").strip()
         if not text:
@@ -152,6 +163,7 @@ class WorkingMemoryState:
             "unresolved_items": list(self.unresolved_items),
             "constraints": list(self.constraints),
             "summary": self.summary,
+            "pending_action": (asdict(self.pending_action) if self.pending_action is not None else None),
             "last_updated": float(self.last_updated),
         }
 

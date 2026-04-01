@@ -25,7 +25,7 @@ from sol.core.evidence import EvidenceSource, ExtractedClaim, build_bundle, clas
 from sol.tools.base import ToolExecutionError, ToolValidationError
 from sol.tools.registry import ToolRegistry
 from sol.core.types import VerificationLevel
-from sol.core.runtime_models import AgentResult, ArtifactContext, Plan, PlanStep, RequestAssessment, ToolError, ToolResult
+from sol.core.runtime_models import AgentResult, ArtifactContext, PendingAction, Plan, PlanStep, RequestAssessment, ToolError, ToolResult
 from sol.core.working_memory import WorkingMemoryManager
 
 
@@ -65,6 +65,8 @@ class Agent:
                 user_id=getattr(self.ctx, "web_session_user", None),
                 thread_id=getattr(self.ctx, "web_session_thread_id", None),
             )
+        if getattr(self.ctx, "working_memory", None) is not None:
+            self.ctx.pending_action = getattr(self.ctx.working_memory, "pending_action", None)
         from sol.core.memory_policy import MemoryPromotionPolicy
         from sol.core.orchestrator import RuntimeOrchestrator
 
@@ -672,6 +674,145 @@ class Agent:
             should_ground_response=should_ground,
             artifact_context=artifact,
         )
+
+    def _pending_action(self) -> PendingAction | None:
+        pending = getattr(self.ctx, "pending_action", None)
+        if isinstance(pending, PendingAction):
+            return pending
+        working_memory = getattr(self.ctx, "working_memory", None)
+        pending = getattr(working_memory, "pending_action", None) if working_memory is not None else None
+        if isinstance(pending, PendingAction):
+            self.ctx.pending_action = pending
+            return pending
+        return None
+
+    def _set_pending_action(self, pending: PendingAction | None) -> None:
+        self.ctx.pending_action = pending
+        working_memory = getattr(self.ctx, "working_memory", None)
+        if working_memory is not None and hasattr(working_memory, "set_pending_action"):
+            working_memory.set_pending_action(pending)
+
+    def _clear_pending_action(self) -> None:
+        self.ctx.pending_action = None
+        working_memory = getattr(self.ctx, "working_memory", None)
+        if working_memory is not None and hasattr(working_memory, "clear_pending_action"):
+            working_memory.clear_pending_action()
+
+    def _build_pending_action(
+        self,
+        *,
+        assessment: RequestAssessment,
+        user_text: str,
+        clarification_prompt: str,
+        thread_id: str | None,
+    ) -> PendingAction | None:
+        missing = tuple(getattr(assessment, "missing_arguments", ()) or ())
+        if not bool(getattr(assessment, "requires_tools", False)) or len(missing) != 1:
+            return None
+        if assessment.intent != "file_write":
+            return None
+        known_args: dict[str, Any] = {}
+        path = self._extract_write_path(user_text)
+        if path:
+            known_args["path"] = path
+        content = self._resolved_write_content(user_text, allow_artifact_context=True)
+        if content is not None:
+            known_args["content"] = content
+        if not known_args and missing == ("target path",):
+            return None
+        return PendingAction(
+            intent=assessment.intent,
+            mode=assessment.mode,
+            tool_name=self._normalize_tool_name("fs.write_text"),
+            known_args=known_args,
+            missing_arguments=missing,
+            clarification_prompt=(clarification_prompt or "").strip(),
+            created_at=time.time(),
+            thread_id=thread_id,
+            source_turn_text=(user_text or "").strip() or None,
+        )
+
+    def _is_pending_action_cancel(self, text: str) -> bool:
+        low = (text or "").strip().lower()
+        return low in {
+            "never mind",
+            "nevermind",
+            "cancel",
+            "cancel that",
+            "cancel it",
+            "stop",
+            "forget it",
+            "don't do that",
+            "do not do that",
+        }
+
+    def _is_non_answer_reply(self, text: str) -> bool:
+        low = (text or "").strip().lower()
+        return low in {
+            "ok",
+            "okay",
+            "thanks",
+            "thank you",
+            "no thanks",
+            "sounds good",
+            "got it",
+        }
+
+    def _should_discard_pending_action(self, text: str, *, pending: PendingAction) -> bool:
+        if self._is_non_answer_reply(text):
+            return True
+        assessment = self.assess_request(text)
+        if assessment.requires_tools:
+            return True
+        if assessment.intent not in {"direct_answer", "empty"}:
+            return True
+        return False
+
+    def _resume_pending_action(self, text: str, *, pending: PendingAction) -> tuple[RequestAssessment, Plan] | None:
+        if pending.intent != "file_write" or pending.tool_name != self._normalize_tool_name("fs.write_text"):
+            return None
+        known_args = dict(getattr(pending, "known_args", {}) or {})
+        missing = list(getattr(pending, "missing_arguments", ()) or ())
+        if "target path" in missing:
+            path = self._extract_write_path(text)
+            if path:
+                known_args["path"] = path
+                missing = [item for item in missing if item != "target path"]
+        if any(item in {"file content", "replacement content"} for item in missing):
+            if self._should_discard_pending_action(text, pending=pending):
+                return None
+            reply = (text or "").strip()
+            if reply:
+                known_args["content"] = reply
+                missing = [item for item in missing if item not in {"file content", "replacement content"}]
+        if missing:
+            return None
+        path = str(known_args.get("path") or "").strip()
+        content = known_args.get("content")
+        if not path or content is None or not str(content).strip():
+            return None
+        assessment = RequestAssessment(
+            mode=str(getattr(pending, "mode", "") or "transform"),
+            intent=str(getattr(pending, "intent", "") or "file_write"),
+            requires_tools=True,
+            target_paths=(path,),
+            missing_arguments=tuple(),
+            confidence=1.0,
+            evidence=("pending_action", "file_write"),
+            should_ground_response=True,
+            artifact_context=self._artifact_context(),
+        )
+        plan = Plan(
+            steps=(
+                PlanStep(
+                    tool_name=self._normalize_tool_name("fs.write_text"),
+                    arguments=self._normalize_tool_args("fs.write_text", {"path": path, "content": str(content)}),
+                    reason="User supplied the missing argument for a pending file write request.",
+                    metadata={"pending_action_resume": True},
+                ),
+            )
+        )
+        return assessment, plan
 
     def _extract_drive_root(self, text: str) -> str | None:
         # Accept drive-root-like inputs even when there's no further path component.

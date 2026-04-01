@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sol.core.action_policy import ActionSelectionPolicy
+from sol.core.action_policy import ActionDecision, ActionSelectionPolicy
 from sol.core.response_sanitizer import finalize_response_text
 from sol.core.result_interpreter import ToolResultInterpreter
 from sol.core.types import VerificationLevel
@@ -40,15 +40,55 @@ class RuntimeOrchestrator:
         prov = (provider or "").strip().lower() or str(self.agent.ctx.cfg.llm.get("provider") or "stub").strip().lower()
         mdl = (model or "").strip() or "stub"
 
-        assessment = self.agent.assess_request(user_text)
-        plan = self.agent.plan(user_message)
-        decision = self.action_policy.choose_chat_action(
-            user_text=user_text,
-            retrieved=retrieved,
-            working_memory=working_memory,
-            explicit_plan=plan,
-            assessment=assessment,
-        )
+        resumed_from_pending = False
+        pending = self.agent._pending_action()
+        if pending is not None:
+            if self.agent._is_pending_action_cancel(user_text):
+                self.agent._clear_pending_action()
+                msg = "Okay, I canceled that pending action."
+                self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id, "pending_action_cancelled": True})
+                if working_memory is not None:
+                    working_memory.clear_unresolved()
+                return AgentResult(ok=True, plan=Plan(steps=tuple()), text=finalize_response_text(msg, response_mode=response_mode), tool_results=tuple(), retrieved=tuple(retrieved), context=context, sources=tuple(), verification_level=VerificationLevel.UNVERIFIED, verification=None)
+            resumed = self.agent._resume_pending_action(user_text, pending=pending)
+            if resumed is not None:
+                assessment, plan = resumed
+                decision = ActionDecision(
+                    action="run_plan",
+                    reason="Resuming pending tool action with supplied clarification.",
+                    evidence=("pending_action",),
+                    use_plan=True,
+                )
+                resumed_from_pending = True
+                self.agent._clear_pending_action()
+            elif self.agent._should_discard_pending_action(user_text, pending=pending):
+                self.agent._clear_pending_action()
+                pending = None
+                assessment = self.agent.assess_request(user_text)
+                plan = self.agent.plan(user_message)
+                decision = self.action_policy.choose_chat_action(
+                    user_text=user_text,
+                    retrieved=retrieved,
+                    working_memory=working_memory,
+                    explicit_plan=plan,
+                    assessment=assessment,
+                )
+            else:
+                msg = str(getattr(pending, "clarification_prompt", "") or "I still need the missing information to continue.")
+                self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id, "pending_action_waiting": True})
+                if working_memory is not None:
+                    working_memory.note_unresolved(msg)
+                return AgentResult(ok=False, plan=Plan(steps=tuple()), text=finalize_response_text(msg, response_mode=response_mode), tool_results=tuple(), retrieved=tuple(retrieved), context=context, sources=tuple(), verification_level=VerificationLevel.UNVERIFIED, verification=None)
+        else:
+            assessment = self.agent.assess_request(user_text)
+            plan = self.agent.plan(user_message)
+            decision = self.action_policy.choose_chat_action(
+                user_text=user_text,
+                retrieved=retrieved,
+                working_memory=working_memory,
+                explicit_plan=plan,
+                assessment=assessment,
+            )
         if working_memory is not None:
             working_memory.record_decision(action=decision.action, reason=decision.reason, evidence=list(decision.evidence))
 
@@ -86,6 +126,16 @@ class RuntimeOrchestrator:
                 msg = "What content should I write to the file?"
             else:
                 msg = f"This request requires a tool or approval path that is currently unavailable.\n\nDetails: {decision.reason}"
+            pending_action = self.agent._build_pending_action(
+                assessment=assessment,
+                user_text=user_text,
+                clarification_prompt=msg,
+                thread_id=thread_id,
+            )
+            if pending_action is not None:
+                self.agent._set_pending_action(pending_action)
+            elif not resumed_from_pending:
+                self.agent._clear_pending_action()
             self.agent._memory_add_event(role="assistant", content=msg, tags=["trusted:assistant"], meta={"thread_id": thread_id})
             if working_memory is not None:
                 working_memory.note_unresolved(decision.reason)
@@ -141,6 +191,7 @@ class RuntimeOrchestrator:
                 self.agent._active_topic = None
 
             ok = bool(tool_results) and all(r.ok for r in tool_results)
+            self.agent._clear_pending_action()
             sources = tuple(self.agent._extract_sources(tool_results))
             if self.agent._plan_includes_web(plan):
                 answer, verification_level, verification = self.agent._synthesize_with_sources(

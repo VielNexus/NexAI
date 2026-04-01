@@ -6,7 +6,7 @@ from typing import Any, Callable
 from sol.config import SolConfig
 from sol.core.audit import AuditLog
 from sol.core.journal import Journal
-from sol.core.runtime_models import ArtifactContext
+from sol.core.runtime_models import ArtifactContext, PendingAction
 from sol.install.local_profile import LocalProfile
 
 
@@ -38,3 +38,4 @@ class SolContext:
     request_unsafe_enabled: bool | None = None
     request_agent_mode: str | None = None
     request_artifact_context: ArtifactContext | None = None
+    pending_action: PendingAction | None = None

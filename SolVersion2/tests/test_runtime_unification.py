@@ -247,6 +247,86 @@ def test_chat_artifact_content_overrides_inline_text_for_save(tmp_path: Path) ->
     assert target.read_text(encoding="utf-8") == 'print("from artifact")\n'
 
 
+def test_pending_file_write_content_resume_executes_on_next_turn(tmp_path: Path) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
+
+    first = agent.chat(
+        user_message="Write into demos.txt",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    assert first.ok is False
+    assert first.text == "What content should I write to the file?"
+    pending = agent._pending_action()
+    assert pending is not None
+    assert pending.tool_name == "fs.write_text"
+    assert pending.known_args["path"].endswith("demos.txt")
+
+    second = agent.chat(
+        user_message="hello world",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    target = work_dir / "demos.txt"
+    assert second.ok is True
+    assert target.exists()
+    assert target.read_text(encoding="utf-8") == "hello world"
+    assert agent._pending_action() is None
+
+
+def test_pending_file_write_cancel_clears_pending_action(tmp_path: Path) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
+
+    first = agent.chat(
+        user_message="Write into demos.txt",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+    assert first.text == "What content should I write to the file?"
+    assert agent._pending_action() is not None
+
+    second = agent.chat(
+        user_message="cancel that",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    assert second.ok is True
+    assert second.text == "Okay, I canceled that pending action."
+    assert agent._pending_action() is None
+    assert not (work_dir / "demos.txt").exists()
+
+
+def test_pending_file_write_unrelated_follow_up_does_not_write(tmp_path: Path) -> None:
+    agent, work_dir = _prepare_fs_write_agent(tmp_path)
+
+    first = agent.chat(
+        user_message="Write into demos.txt",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+    assert first.text == "What content should I write to the file?"
+
+    second = agent.chat(
+        user_message="design a safer orchestrator",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    assert second.ok is True
+    assert "design a safer orchestrator" in second.text.lower()
+    assert agent._pending_action() is None
+    assert not (work_dir / "demos.txt").exists()
+
+
 def test_chat_edit_replaces_existing_file_contents(tmp_path: Path) -> None:
     agent, work_dir = _prepare_fs_write_agent(tmp_path)
     target = work_dir / "demo.txt"
