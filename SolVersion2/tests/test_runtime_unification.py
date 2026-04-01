@@ -10,7 +10,7 @@ from sol.core.audit import AuditLog
 from sol.core.context import SolContext
 from sol.core.memory_policy import MemoryPromotionPolicy
 from sol.core.journal import Journal
-from sol.core.runtime_models import Plan, PlanStep
+from sol.core.runtime_models import ArtifactContext, Plan, PlanStep
 from sol.core.working_memory import WorkingMemoryManager
 from sol.jobs.runner import JobRunner
 from sol.jobs.storage import JobStore
@@ -231,17 +231,17 @@ def test_chat_edit_replaces_existing_file_contents(tmp_path: Path) -> None:
 
 def test_chat_canvas_artifact_with_filename_writes_file(tmp_path: Path) -> None:
     agent, work_dir = _prepare_fs_write_agent(tmp_path)
-    agent.ctx.request_active_artifact = {
-        "type": "code",
-        "language": "python",
-        "content": 'print("hello from canvas")\n',
-        "source": "canvas",
-        "is_dirty": True,
-        "title": "Canvas Draft",
-    }
+    agent.ctx.request_artifact_context = ArtifactContext(
+        source="canvas",
+        type="code",
+        language="python",
+        content='print("hello from canvas")\n',
+        dirty=True,
+        title="Canvas Draft",
+    )
 
     result = agent.chat(
-        user_message="save this code as demo.py",
+        user_message="save this as demo.py",
         provider="stub",
         model="stub",
         thread_id="thread-1",
@@ -258,12 +258,12 @@ def test_chat_canvas_artifact_with_filename_writes_file(tmp_path: Path) -> None:
 
 def test_chat_canvas_artifact_without_filename_requests_only_filename(tmp_path: Path) -> None:
     agent, _work_dir = _prepare_fs_write_agent(tmp_path)
-    agent.ctx.request_active_artifact = {
-        "type": "code",
-        "language": "python",
-        "content": 'print("hello from canvas")\n',
-        "source": "canvas",
-    }
+    agent.ctx.request_artifact_context = ArtifactContext(
+        source="canvas",
+        type="code",
+        language="python",
+        content='print("hello from canvas")\n',
+    )
 
     result = agent.chat(
         user_message="save what's in canvas",
@@ -290,6 +290,49 @@ def test_chat_save_code_without_canvas_keeps_missing_content_failure(tmp_path: P
     assert result.ok is False
     assert result.tool_results == tuple()
     assert "Missing required arguments: target path, file content" in result.text
+
+
+def test_chat_explain_this_code_uses_artifact_context(monkeypatch, tmp_path: Path) -> None:
+    agent, _work_dir = _prepare_fs_write_agent(tmp_path)
+    agent.ctx.request_artifact_context = ArtifactContext(
+        source="canvas",
+        type="code",
+        language="python",
+        content="def add(a, b):\n    return a + b\n",
+        title="Adder",
+    )
+    captured: dict[str, str] = {}
+
+    def _fake_llm_chat_audited(**kwargs):
+        captured["retrieval_context"] = str(kwargs.get("retrieval_context") or "")
+        return "Artifact explanation"
+
+    monkeypatch.setattr(agent, "_run_llm_chat_audited", _fake_llm_chat_audited)
+    result = agent.chat(
+        user_message="explain this code",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    assert result.ok is True
+    assert result.text == "Artifact explanation"
+    assert "ACTIVE ARTIFACT (request-scoped):" in captured["retrieval_context"]
+    assert "def add(a, b):" in captured["retrieval_context"]
+
+
+def test_chat_explain_this_code_without_artifact_clarifies(tmp_path: Path) -> None:
+    agent, _work_dir = _prepare_fs_write_agent(tmp_path)
+    result = agent.chat(
+        user_message="explain this code",
+        provider="stub",
+        model="stub",
+        thread_id="thread-1",
+    )
+
+    assert result.ok is False
+    assert result.tool_results == tuple()
+    assert "Missing required arguments: artifact context" in result.text
 
 
 def test_posix_absolute_write_prompt_is_tool_addressable(tmp_path: Path) -> None:

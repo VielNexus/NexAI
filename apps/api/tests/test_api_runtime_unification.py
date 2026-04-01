@@ -322,14 +322,14 @@ def test_chat_live_route_canvas_artifact_with_filename_writes_file(monkeypatch, 
     response = client.post(
         "/v1/chat",
         json={
-            "message": "save this code as demo.py",
+            "message": "save this as demo.py",
             "thread_id": None,
             "active_artifact": {
+                "source": "canvas",
                 "type": "code",
                 "language": "python",
                 "content": 'print("hello from canvas")\n',
-                "source": "canvas",
-                "is_dirty": True,
+                "dirty": True,
                 "title": "Canvas Draft",
             },
         },
@@ -373,16 +373,100 @@ def test_chat_live_route_canvas_artifact_without_filename_clarifies(monkeypatch,
             "message": "save what's in canvas",
             "thread_id": None,
             "active_artifact": {
+                "source": "canvas",
                 "type": "code",
                 "language": "python",
                 "content": 'print("hello from canvas")\n',
-                "source": "canvas",
             },
         },
     )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["content"] == "What filename should I save this as?"
+
+
+def test_chat_live_route_explain_this_code_uses_artifact_context(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, _work_dir = _build_live_agent(tmp_path)
+    captured: dict[str, str] = {}
+
+    def _fake_llm_chat_audited(**kwargs):
+        captured["retrieval_context"] = str(kwargs.get("retrieval_context") or "")
+        return "Artifact explanation"
+
+    monkeypatch.setattr(agent, "_run_llm_chat_audited", _fake_llm_chat_audited)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/v1/chat",
+        json={
+            "message": "explain this code",
+            "thread_id": None,
+            "active_artifact": {
+                "source": "canvas",
+                "type": "code",
+                "language": "python",
+                "content": "def add(a, b):\n    return a + b\n",
+                "title": "Adder",
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["content"] == "Artifact explanation"
+    assert "ACTIVE ARTIFACT (request-scoped):" in captured["retrieval_context"]
+    assert "def add(a, b):" in captured["retrieval_context"]
+
+
+def test_chat_live_route_explain_this_code_without_artifact_clarifies(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(config, "auth_enabled", False)
+    monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
+    threads_dir = tmp_path / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config, "threads_dir", threads_dir)
+    with settings_route._CACHE_LOCK:
+        settings_route._CACHED_SETTINGS = None
+    session_store.reset_for_tests()
+    session_tracker.reset_for_tests()
+
+    agent, _work_dir = _build_live_agent(tmp_path)
+
+    class _FakeAudit:
+        def tail(self, limit: int = 50):
+            return []
+
+    class _FakeHandle:
+        class ctx:
+            audit = _FakeAudit()
+
+    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+
+    client = TestClient(create_app())
+    response = client.post("/v1/chat", json={"message": "explain this code", "thread_id": None})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "Missing required arguments: artifact context" in payload["content"]
 
 
 def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatch, tmp_path) -> None:

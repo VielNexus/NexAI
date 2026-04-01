@@ -99,13 +99,14 @@ function buildActiveCanvasArtifact(canvas: CodeCanvasState) {
   const content = (canvas.content || "").trim();
   if (!content) return null;
   return {
+    source: "canvas" as const,
     type: "code" as const,
     language: canvas.language,
     content,
-    source: "canvas" as const,
-    is_dirty: canvas.isDirty,
+    dirty: canvas.isDirty,
+    path: null,
     title: canvas.title,
-    source_message_id: canvas.sourceMessageId,
+    label: canvas.sourceMessageId,
   };
 }
 

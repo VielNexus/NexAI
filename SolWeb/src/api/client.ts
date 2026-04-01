@@ -178,14 +178,15 @@ export type WebPolicyUpdateResponse = {
 
 export type WebPolicySessionAllowRequest = { thread_id: string; domain: string; reason: string };
 export type WebPolicySessionClearRequest = { thread_id: string; reason: string };
-export type ActiveArtifactRequest = {
-  type: "code";
-  language: string;
-  content: string;
-  source: "canvas";
-  is_dirty?: boolean;
-  title?: string;
-  source_message_id?: string | null;
+export type ArtifactContextRequest = {
+  source: "canvas" | "file" | "tool_output";
+  type: "code" | "text" | "json" | "diff" | "output";
+  language?: string | null;
+  content?: string | null;
+  path?: string | null;
+  dirty?: boolean;
+  title?: string | null;
+  label?: string | null;
 };
 export type WebPolicySessionResponse = { ok: boolean; ts: number; audit_tail: AuditEntry[] };
 
@@ -396,7 +397,7 @@ export async function sendChatMessage(
   threadId?: string,
   responseMode: ResponseMode = "chat",
   unsafeEnabled?: boolean,
-  activeArtifact?: ActiveArtifactRequest | null
+  activeArtifact?: ArtifactContextRequest | null
 ): Promise<ChatResponse & { retrieved?: RetrievedChunk[] | null; audit_tail?: AuditEntry[] | null }> {
   const body: Record<string, unknown> = { message };
   if (threadId) body.thread_id = threadId;

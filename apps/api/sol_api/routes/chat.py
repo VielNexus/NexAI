@@ -10,6 +10,7 @@ import urllib.request
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from sol.core.runtime_models import ArtifactContext
 from sol.core.llm import OllamaConfig, ProviderError, ollama_generate, provider_error_detail
 from sol.core.response_sanitizer import finalize_response_text
 
@@ -33,14 +34,15 @@ from sol_api.solv2_bridge import SolV2Unavailable, get_agent_for_thread, get_han
 router = APIRouter(tags=["chat"])
 
 
-class ActiveArtifactRequest(BaseModel):
+class ArtifactContextRequest(BaseModel):
     type: str
-    language: str
-    content: str
     source: str
-    is_dirty: bool | None = None
+    language: str | None = None
+    content: str | None = None
+    path: str | None = None
+    dirty: bool | None = None
     title: str | None = None
-    source_message_id: str | None = None
+    label: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -48,7 +50,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = None
     response_mode: str = "chat"
     unsafe_enabled: bool | None = None
-    active_artifact: ActiveArtifactRequest | None = None
+    active_artifact: ArtifactContextRequest | None = None
 
 
 class RetrievedChunk(BaseModel):
@@ -820,7 +822,24 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             setattr(agent_ctx, "web_session_user", effective_user)
             setattr(agent_ctx, "request_unsafe_enabled", request_unsafe_enabled)
             setattr(agent_ctx, "request_agent_mode", "unsafe" if request_unsafe_enabled else str(getattr(agent_ctx.cfg.agent, "mode", "supervised")))
-            setattr(agent_ctx, "request_active_artifact", (request.active_artifact.model_dump() if request.active_artifact is not None else None))
+            setattr(
+                agent_ctx,
+                "request_artifact_context",
+                (
+                    ArtifactContext(
+                        source=str(request.active_artifact.source or "").strip(),
+                        type=str(request.active_artifact.type or "").strip(),
+                        language=(str(request.active_artifact.language).strip() if request.active_artifact.language is not None else None),
+                        content=(str(request.active_artifact.content) if request.active_artifact.content is not None else None),
+                        path=(str(request.active_artifact.path).strip() if request.active_artifact.path is not None else None),
+                        dirty=request.active_artifact.dirty,
+                        title=(str(request.active_artifact.title).strip() if request.active_artifact.title is not None else None),
+                        label=(str(request.active_artifact.label).strip() if request.active_artifact.label is not None else None),
+                    )
+                    if request.active_artifact is not None
+                    else None
+                ),
+            )
         tokens = set_request_context(thread_id=effective_thread_id, user=effective_user, unsafe_enabled=request_unsafe_enabled)
         handle_cfg = getattr(h, "cfg", None)
         if provider == "ollama" and isinstance(getattr(handle_cfg, "llm", None), dict):

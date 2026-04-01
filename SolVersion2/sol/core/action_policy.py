@@ -72,7 +72,7 @@ class ActionSelectionPolicy:
                 reason="Request is asking to design or define a tool/skill, not execute one.",
                 evidence=tuple(getattr(assessment, "evidence", ()) or ("tool_design_request",)),
                 use_llm=True,
-                use_retrieval_context=bool(retrieved),
+                use_retrieval_context=bool(retrieved) or getattr(assessment, "artifact_context", None) is not None,
             )
 
         if self.agent._is_time_sensitive_query(text) and bool(self.agent.ctx.cfg.agent.auto_web_verify) and bool(self.agent.ctx.cfg.web.enabled):

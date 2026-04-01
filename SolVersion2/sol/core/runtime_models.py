@@ -43,6 +43,18 @@ class ToolResult:
 
 
 @dataclass(frozen=True)
+class ArtifactContext:
+    source: str
+    type: str
+    language: str | None = None
+    content: str | None = None
+    path: str | None = None
+    dirty: bool | None = None
+    title: str | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
 class RequestAssessment:
     mode: str
     intent: str
@@ -53,6 +65,7 @@ class RequestAssessment:
     evidence: tuple[str, ...] = tuple()
     repo_query: str | None = None
     should_ground_response: bool = False
+    artifact_context: ArtifactContext | None = None
 
 
 @dataclass(frozen=True)

@@ -79,7 +79,7 @@ class RuntimeOrchestrator:
             if (
                 assessment.intent == "file_write"
                 and tuple(getattr(assessment, "missing_arguments", ()) or ()) == ("target path",)
-                and self.agent._active_artifact() is not None
+                and self.agent._artifact_context() is not None
             ):
                 msg = "What filename should I save this as?"
             else:
