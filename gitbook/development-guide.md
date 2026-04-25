@@ -16,12 +16,18 @@ Useful local development tools:
 From the repo root:
 
 ```bash
+python -m pytest SolVersion2/tests apps/api/tests
+```
+
+From `SolVersion2`:
+
+```bash
 cd SolVersion2
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip setuptools wheel
 python -m pip install -e ".[developer]"
-pytest
+python -m pytest tests
 ```
 
 On PowerShell:
@@ -32,7 +38,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip setuptools wheel
 python -m pip install -e ".[developer]"
-pytest
+python -m pytest tests
 ```
 
 ## API Development
@@ -111,12 +117,18 @@ npm run tauri:build
 ## API Tests
 
 ```bash
+python -m pytest apps/api/tests
+```
+
+For API-only setup from `apps/api`:
+
+```bash
 cd apps/api
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt pytest
 export PYTHONPATH="$(pwd):$(pwd)/../../SolVersion2"
-pytest
+python -m pytest tests
 ```
 
 On PowerShell, set:

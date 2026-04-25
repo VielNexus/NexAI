@@ -183,14 +183,14 @@ python -m pip install -e ".[developer]"
 Run Python tests from the repository root:
 
 ```bash
-PYTHONPATH="$PWD/SolVersion2:$PWD/apps/api" python -m pytest SolVersion2/tests apps/api/tests
+python -m pytest SolVersion2/tests apps/api/tests
 ```
 
-PowerShell:
+Or run the SolVersion2 tests from inside the package directory:
 
-```powershell
-$env:PYTHONPATH = "$PWD\SolVersion2;$PWD\apps\api"
-python -m pytest SolVersion2\tests apps\api\tests
+```bash
+cd SolVersion2
+python -m pytest tests
 ```
 
 Run the API directly for development:
@@ -303,4 +303,3 @@ After cleanup, rebuild from source using the setup commands above.
 ## License
 
 Apache-2.0
-

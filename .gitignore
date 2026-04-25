@@ -129,3 +129,6 @@ Sol-Log.md
 *.db
 *.sqlite
 *.sqlite3
+
+# Pytest temporary cache directories
+pytest-cache-files-*
