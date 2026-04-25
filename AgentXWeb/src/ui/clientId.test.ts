@@ -10,7 +10,7 @@ describe("createClientIdWithCrypto", () => {
   it("falls back to getRandomValues when randomUUID is unavailable", () => {
     const id = createClientIdWithCrypto({
       getRandomValues: (array) => {
-        const bytes = array as Uint8Array;
+        const bytes = array as unknown as Uint8Array;
         bytes.fill(1);
         return array;
       },
