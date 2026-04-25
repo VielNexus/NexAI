@@ -9,6 +9,7 @@ Design rules:
 from __future__ import annotations
 
 import argparse
+import os
 
 import uvicorn
 from fastapi import Depends, FastAPI
@@ -27,6 +28,40 @@ from agentx_api.routes.threads import router as threads_router
 from agentx_api.routes.unsafe import router as unsafe_router
 
 
+def _split_origins(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    origins: list[str] = []
+    for item in raw.replace(",", ";").split(";"):
+        origin = item.strip().rstrip("/")
+        if origin and origin not in origins:
+            origins.append(origin)
+    return origins
+
+
+def _cors_allow_origins() -> list[str]:
+    origins = [
+        # XAMPP/Apache static hosting (port 80).
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+        "tauri://localhost",
+    ]
+    for origin in _split_origins(os.environ.get("AGENTX_CORS_ALLOW_ORIGINS")):
+        if origin not in origins:
+            origins.append(origin)
+    web_origin = (os.environ.get("AGENTX_WEB_ORIGIN") or "").strip().rstrip("/")
+    if web_origin and web_origin not in origins:
+        origins.append(web_origin)
+    return origins
+
 def create_app() -> FastAPI:
     app = FastAPI(title="AgentX API", version="0.0.1")
 
@@ -39,20 +74,7 @@ def create_app() -> FastAPI:
     # - http://127.0.0.1:1420
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            # XAMPP/Apache static hosting (port 80).
-            "http://localhost",
-            "http://127.0.0.1",
-            "http://localhost:1420",
-            "http://127.0.0.1:1420",
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5174",
-            "http://tauri.localhost",
-            "https://tauri.localhost",
-            "tauri://localhost",
-        ],
+        allow_origins=_cors_allow_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

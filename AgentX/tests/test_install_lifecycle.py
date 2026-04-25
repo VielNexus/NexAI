@@ -101,18 +101,55 @@ def test_runtime_layout_and_generated_config(tmp_path: Path, monkeypatch) -> Non
         web_port=8080,
     )
     _stub_managed_runtime(monkeypatch)
+    monkeypatch.setattr("agentx.install.lifecycle._detect_primary_interface_ip", lambda: "172.17.24.34")
     paths = ensure_installation_ready(cfg)
     text = paths.config_path.read_text(encoding="utf-8")
     assert 'provider = "openai"' in text
     assert 'working_dir = "' in text
     assert paths.web_config_path.exists()
-    assert json.loads(paths.web_config_path.read_text(encoding="utf-8").split("=", 1)[1].rstrip(";\n"))["apiBaseUrl"] == "http://0.0.0.0:9000"
+    web_config = paths.web_config_path.read_text(encoding="utf-8")
+    assert 'globalThis.__AGENTXWEB_CONFIG__ = {"apiBase": "http://172.17.24.34:9000"};' in web_config
+    assert 'window.AGENTX_CONFIG = {"apiBaseUrl": "http://172.17.24.34:9000"};' in web_config
+    assert "http://0.0.0.0:9000" not in web_config
     cfg_loaded = load_config(str(paths.config_path))
     assert cfg_loaded.paths.runtime_root == (tmp_path / "runtime").resolve()
     assert cfg_loaded.paths.web_dist_dir == (app_root / "AgentXWeb" / "dist").resolve()
     assert cfg_loaded.paths.user_plugins_dir == (tmp_path / "runtime" / "extensions" / "plugins").resolve()
     shown = show_paths(cfg)
     assert shown["runtime_root"] == str((tmp_path / "runtime").resolve())
+
+
+
+def test_web_config_uses_reachable_api_url_for_bind_all(tmp_path: Path, monkeypatch) -> None:
+    app_root = tmp_path / "app"
+    (app_root / "AgentX" / "plugins").mkdir(parents=True)
+    (app_root / "AgentX" / "skills").mkdir(parents=True)
+    (app_root / "AgentX" / "pyproject.toml").write_text("[project]\nname='agentx'\nversion='0.0.0'\n", encoding="utf-8")
+    (app_root / "AgentX" / "Server" / "data" / "features").mkdir(parents=True)
+    (app_root / "apps" / "api" / "agentx_api").mkdir(parents=True)
+    (app_root / "AgentXWeb" / "dist").mkdir(parents=True)
+    (app_root / "AgentXWeb" / "dist" / "index.html").write_text("ok", encoding="utf-8")
+    cfg = build_install_config(
+        app_root=app_root,
+        runtime_root=tmp_path / "runtime",
+        working_dir=tmp_path / "work",
+        profile=InstallProfile.STANDARD,
+        model_provider="stub",
+        api_host="0.0.0.0",
+        api_port=8420,
+        web_host="0.0.0.0",
+        web_port=5173,
+    )
+    monkeypatch.setattr("agentx.install.lifecycle._detect_primary_interface_ip", lambda: "172.17.24.34")
+    _stub_managed_runtime(monkeypatch)
+
+    paths = ensure_installation_ready(cfg)
+    web_config = paths.web_config_path.read_text(encoding="utf-8")
+
+    assert 'globalThis.__AGENTXWEB_CONFIG__ = {"apiBase": "http://172.17.24.34:8420"};' in web_config
+    assert 'window.__AGENTXWEB_CONFIG__ = globalThis.__AGENTXWEB_CONFIG__;' in web_config
+    assert 'window.AGENTX_CONFIG = {"apiBaseUrl": "http://172.17.24.34:8420"};' in web_config
+    assert "http://0.0.0.0:8420" not in web_config
 
 
 def test_install_config_round_trip_custom_ollama_url(tmp_path: Path, monkeypatch) -> None:

@@ -251,6 +251,62 @@ auth_enabled = {auth_enabled}
     return content
 
 
+_BIND_ALL_HOSTS = {"0.0.0.0", "::", "[::]"}
+
+
+def _detect_primary_interface_ip() -> str | None:
+    candidates: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(0.25)
+            sock.connect(("8.8.8.8", 80))
+            candidates.append(sock.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        candidates.extend(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    for candidate in candidates:
+        if candidate and not candidate.startswith("127."):
+            return candidate
+    return None
+
+
+def _format_url_host(host: str) -> str:
+    host = (host or "").strip()
+    if not host:
+        return "127.0.0.1"
+    if ":" in host and not (host.startswith("[") and host.endswith("]")):
+        return f"[{host}]"
+    return host
+
+
+def browser_host_for_bind_host(host: str) -> str:
+    normalized = (host or "").strip().lower()
+    if normalized in _BIND_ALL_HOSTS:
+        return _detect_primary_interface_ip() or "127.0.0.1"
+    return _format_url_host(host or "127.0.0.1")
+
+
+def browser_api_base_url(config: InstallConfig) -> str:
+    return f"http://{browser_host_for_bind_host(config.api.host)}:{config.api.port}"
+
+
+def browser_web_origin(config: InstallConfig) -> str:
+    return f"http://{browser_host_for_bind_host(config.web.host)}:{config.web.port}"
+
+
+def write_web_config(config: InstallConfig, paths: InstallPaths) -> None:
+    api_base = browser_api_base_url(config)
+    content = (
+        "globalThis.__AGENTXWEB_CONFIG__ = " + json.dumps({"apiBase": api_base}, ensure_ascii=False) + ";\n"
+        "window.__AGENTXWEB_CONFIG__ = globalThis.__AGENTXWEB_CONFIG__;\n"
+        "window.AGENTX_CONFIG = " + json.dumps({"apiBaseUrl": api_base}, ensure_ascii=False) + ";\n"
+    )
+    paths.web_config_path.write_text(content, encoding="utf-8")
+
+
 def ensure_installation_ready(config: InstallConfig) -> InstallPaths:
     paths = compute_install_paths(config)
     for directory in (
@@ -277,10 +333,7 @@ def ensure_installation_ready(config: InstallConfig) -> InstallPaths:
         directory.mkdir(parents=True, exist_ok=True)
     _append_log_message(paths.install_log_path, f"Preparing installation for profile={config.profile.value} runtime_root={paths.runtime_root}")
     paths.config_path.write_text(generate_runtime_config(config), encoding="utf-8")
-    paths.web_config_path.write_text(
-        "window.AGENTX_CONFIG = " + json.dumps({"apiBaseUrl": f"http://{config.api.host}:{config.api.port}"}, ensure_ascii=False) + ";\n",
-        encoding="utf-8",
-    )
+    write_web_config(config, paths)
     _ensure_runtime_python_environment(config, paths)
     _assert_managed_runtime_ready(config, paths)
     _append_log_message(paths.install_log_path, f"Managed runtime ready at {paths.runtime_python_path}")
@@ -710,6 +763,10 @@ def _common_env(config: InstallConfig, paths: InstallPaths) -> dict[str, str]:
     env["AGENTX_API_DATA_DIR"] = str(paths.api_data_dir)
     env["AGENTX_AUTH_ENABLED"] = "true" if config.auth.enabled else "false"
     env["AGENTX_OLLAMA_BASE_URL"] = str(config.ollama_base_url)
+    web_origin = browser_web_origin(config)
+    existing_origins = env.get("AGENTX_CORS_ALLOW_ORIGINS", "").strip()
+    env["AGENTX_CORS_ALLOW_ORIGINS"] = ";".join([item for item in (existing_origins, web_origin) if item])
+    env["AGENTX_WEB_ORIGIN"] = web_origin
     env["AGENTX_PROFILE_ID"] = local_profile.profile_id
     env["AGENTX_PROFILE_NAME"] = local_profile.display_name
     env["PYTHONPATH"] = os.pathsep.join(

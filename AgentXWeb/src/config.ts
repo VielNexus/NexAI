@@ -4,6 +4,10 @@ export const config = {
     const runtimeTrimmed = (runtime ?? "").trim();
     if (runtimeTrimmed.length > 0) return runtimeTrimmed;
 
+    const legacy = (globalThis as any).AGENTX_CONFIG?.apiBaseUrl as string | undefined;
+    const legacyTrimmed = (legacy ?? "").trim();
+    if (legacyTrimmed.length > 0) return legacyTrimmed;
+
     const raw = (import.meta as any).env?.VITE_AGENTX_API_BASE as string | undefined;
     const trimmed = (raw ?? "").trim();
     if (trimmed.length > 0) return trimmed;

@@ -59,3 +59,24 @@ def test_login_route_reports_when_auth_is_disabled(monkeypatch, tmp_path: Path) 
 
     assert response.status_code == 409, response.text
     assert response.json()["detail"] == "Authentication is disabled for this install."
+
+
+def test_cors_allows_runtime_web_origin_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("AGENTX_CORS_ALLOW_ORIGINS", "http://172.17.24.34:5173")
+    client = TestClient(create_app())
+
+    response = client.get("/v1/status", headers={"Origin": "http://172.17.24.34:5173"})
+
+    assert response.status_code == 200, response.text
+    assert response.headers["access-control-allow-origin"] == "http://172.17.24.34:5173"
+
+
+def test_cors_allows_runtime_web_origin_alias_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("AGENTX_CORS_ALLOW_ORIGINS", raising=False)
+    monkeypatch.setenv("AGENTX_WEB_ORIGIN", "http://172.17.24.34:5173")
+    client = TestClient(create_app())
+
+    response = client.get("/v1/status", headers={"Origin": "http://172.17.24.34:5173"})
+
+    assert response.status_code == 200, response.text
+    assert response.headers["access-control-allow-origin"] == "http://172.17.24.34:5173"
