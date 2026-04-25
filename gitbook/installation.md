@@ -9,7 +9,7 @@ The product-style installer currently targets Linux and WSL, with Ubuntu 24.04 a
 Use the root installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VielAgentX/AgentX/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
 ```
 
 What `install.sh` does:
@@ -122,3 +122,13 @@ Open:
 ```text
 http://127.0.0.1:5173
 ```
+
+### WSL browser access
+
+WSL fresh installs bind the API and web UI to `0.0.0.0` by default so Windows can reach AgentX through the WSL IP. Find it with:
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+Then open `http://<wsl-ip>:5173` from Windows. Native Linux installs still default to localhost unless overridden with `AGENTX_API_HOST` or `AGENTX_WEB_HOST`.

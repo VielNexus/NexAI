@@ -67,7 +67,7 @@ Usage: ./install.sh [--help]
 Fresh Ubuntu 24 installer for AgentX.
 
 Environment overrides:
-  AGENTX_REPO_URL          Git clone URL (default: https://github.com/VielAgentX/AgentX.git)
+  AGENTX_REPO_URL          Git clone URL (default: https://github.com/VielNexus/NexAI.git)
   AGENTX_REF               Git ref to install (default: main)
   AGENTX_APP_ROOT          App bundle path (default: ~/.local/share/agentx/app)
   AGENTX_RUNTIME_ROOT      Mutable runtime root (default: ~/.local/share/agentx)
@@ -75,6 +75,8 @@ Environment overrides:
   AGENTX_PROFILE           Install profile passed to `agentx setup` (default: standard)
   AGENTX_MODEL_PROVIDER    Model provider for setup (default: ollama)
   AGENTX_OLLAMA_BASE_URL   Ollama URL for setup (default: http://127.0.0.1:11434)
+  AGENTX_API_HOST          API bind host (default: 127.0.0.1, or 0.0.0.0 on WSL)
+  AGENTX_WEB_HOST          Web UI bind host (default: 127.0.0.1, or 0.0.0.0 on WSL)
   AGENTX_SKIP_APT          Set to 1 to skip apt package installation
   AGENTX_SKIP_WEB_BUILD    Set to 1 to skip AgentXWeb npm install/build
   AGENTX_AUTOSTART         Set to 1 to run `agentx start` after setup
@@ -100,6 +102,18 @@ ensure_local_bin_on_path_for_session() {
 ensure_linux() {
   if [[ "${OSTYPE:-}" != linux* ]]; then
     die "error: install.sh currently supports Linux only."
+  fi
+}
+
+detect_wsl() {
+  [[ -r /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
+}
+
+default_service_bind_host() {
+  if detect_wsl; then
+    printf '0.0.0.0\n'
+  else
+    printf '127.0.0.1\n'
   fi
 }
 
@@ -251,6 +265,8 @@ run_bootstrap_install() {
   local profile="$4"
   local provider="$5"
   local ollama_url="$6"
+  local api_host="$7"
+  local web_host="$8"
 
   info "Running AgentX bootstrap + managed runtime setup..."
   bash "$app_root/install-agentx.sh" -- \
@@ -261,9 +277,9 @@ run_bootstrap_install() {
     --working-dir "$working_dir" \
     --model-provider "$provider" \
     --ollama-base-url "$ollama_url" \
-    --api-host 127.0.0.1 \
+    --api-host "$api_host" \
     --api-port 8420 \
-    --web-host 127.0.0.1 \
+    --web-host "$web_host" \
     --web-port 5173 \
     --web-enabled true \
     --service-mode none
@@ -286,7 +302,7 @@ main() {
   ensure_supported_os
 
   local repo_url
-  repo_url="$(env_value AGENTX_REPO_URL "https://github.com/VielAgentX/AgentX.git")"
+  repo_url="$(env_value AGENTX_REPO_URL "https://github.com/VielNexus/NexAI.git")"
   local ref
   ref="$(env_value AGENTX_REF main)"
   local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -302,6 +318,12 @@ main() {
   provider="$(env_value AGENTX_MODEL_PROVIDER ollama)"
   local ollama_url
   ollama_url="$(env_value AGENTX_OLLAMA_BASE_URL "http://127.0.0.1:11434")"
+  local default_bind_host
+  default_bind_host="$(default_service_bind_host)"
+  local api_host
+  api_host="$(env_value AGENTX_API_HOST "$default_bind_host")"
+  local web_host
+  web_host="$(env_value AGENTX_WEB_HOST "$default_bind_host")"
 
   header
   printf '  Repo URL:       %s\n' "$repo_url"
@@ -311,6 +333,8 @@ main() {
   printf '  Working dir:    %s\n' "$working_dir"
   printf '  Install profile:%s\n' " $profile"
   printf '  Model provider: %s\n' "$provider"
+  printf '  API host:       %s\n' "$api_host"
+  printf '  Web host:       %s\n' "$web_host"
   printf '\n'
 
   apt_install_if_needed ca-certificates curl git gnupg python3 python3-venv python3-pip
@@ -322,7 +346,7 @@ main() {
 
   prepare_repo_checkout "$app_root" "$repo_url" "$ref"
   build_agentxweb "$app_root"
-  run_bootstrap_install "$app_root" "$runtime_root" "$working_dir" "$profile" "$provider" "$ollama_url"
+  run_bootstrap_install "$app_root" "$runtime_root" "$working_dir" "$profile" "$provider" "$ollama_url" "$api_host" "$web_host"
   ensure_local_bin_on_path_for_session
 
   local launcher="agentx"
@@ -339,6 +363,11 @@ main() {
     "$launcher" start
   fi
 
+  local display_web_host="$web_host"
+  if [[ "$display_web_host" == "0.0.0.0" ]]; then
+    display_web_host="<host-or-wsl-ip>"
+  fi
+
   info "Next steps:"
   printf '  %s start\n' "$launcher"
   printf '  %s stop\n' "$launcher"
@@ -346,7 +375,7 @@ main() {
   printf '  %s status\n' "$launcher"
   printf '  %s uninstall\n' "$launcher"
   printf '  %s doctor\n' "$launcher"
-  printf '  Web UI: http://127.0.0.1:5173\n'
+  printf '  Web UI: http://%s:5173\n' "$display_web_host"
   if [[ "$provider" == "ollama" ]]; then
     printf '  Ollama: make sure a local Ollama server is running at %s\n' "$ollama_url"
   fi

@@ -8,21 +8,43 @@ from agentx.install.models import ApiRuntimeConfig, AuthRuntimeConfig, InstallCo
 from agentx.install.ollama import DEFAULT_OLLAMA_BASE_URL, normalize_ollama_base_url
 
 
-def default_install_config_path() -> Path:
+def _config_base_dir() -> Path:
     xdg = (os.environ.get("XDG_CONFIG_HOME") or "").strip()
     if xdg:
-        base = Path(xdg).expanduser()
-    else:
-        base = Path.home() / ".config"
-    preferred = base / "agentx" / "install.json"
-    legacy = base / "sol" / "install.json"
-    if not preferred.exists() and legacy.exists():
+        return Path(xdg).expanduser()
+    return Path.home() / ".config"
+
+
+def preferred_install_config_path() -> Path:
+    return _config_base_dir() / "agentx" / "install.json"
+
+
+def legacy_install_config_path() -> Path:
+    return _config_base_dir() / "sol" / "install.json"
+
+
+def default_install_config_path() -> Path:
+    """Return the preferred AgentX install metadata path for new writes.
+
+    Loaders still fall back to the legacy Sol path when the preferred path has
+    not been created yet. This keeps existing installs working while preventing
+    new setup runs from writing fresh metadata under ~/.config/sol.
+    """
+
+    return preferred_install_config_path()
+
+
+def _resolve_install_config_path(path: Path | None = None, *, for_write: bool = False) -> Path:
+    cfg_path = (path or default_install_config_path()).expanduser().resolve()
+    preferred = preferred_install_config_path().expanduser().resolve()
+    legacy = legacy_install_config_path().expanduser().resolve()
+    if not for_write and cfg_path == preferred and not preferred.exists() and legacy.exists():
         return legacy
-    return preferred
+    return cfg_path
 
 
 def load_install_config(path: Path | None = None) -> InstallConfig:
-    cfg_path = (path or default_install_config_path()).expanduser().resolve()
+    cfg_path = _resolve_install_config_path(path, for_write=False)
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     return InstallConfig(
         schema_version=int(data.get("schema_version", 1)),
@@ -53,7 +75,7 @@ def load_install_config(path: Path | None = None) -> InstallConfig:
 
 
 def save_install_config(config: InstallConfig, path: Path | None = None) -> Path:
-    cfg_path = (path or default_install_config_path()).expanduser().resolve()
+    cfg_path = _resolve_install_config_path(path, for_write=True)
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(config.to_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return cfg_path

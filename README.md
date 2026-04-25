@@ -29,7 +29,7 @@ AgentX is built to run as a practical local system rather than a cloud-only assi
 Fresh Ubuntu 24 installs are intended to start with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VielAgentX/AgentX/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
 ```
 
 That root installer:
@@ -307,3 +307,14 @@ After cleanup, rebuild from source using the setup commands above.
 ## License
 
 Apache-2.0
+
+
+### WSL web access
+
+On WSL, fresh installs bind the AgentX API and web UI to `0.0.0.0` by default so the Windows browser can reach the UI through the WSL IP. Get the WSL IP with:
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+Then open `http://<wsl-ip>:5173` from Windows.

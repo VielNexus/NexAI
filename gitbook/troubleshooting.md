@@ -207,3 +207,24 @@ npm run build
 cd ..
 python scripts/package_release.py
 ```
+
+
+## WSL web UI cannot be reached from Windows
+
+On WSL installs, AgentX should bind the API and web UI to `0.0.0.0` by default so Windows can reach the WSL service through the WSL IP.
+
+For older installs, re-run setup with explicit WSL-friendly bind hosts:
+
+```bash
+agentx stop
+agentx setup --non-interactive --profile standard --app-root ~/.local/share/agentx/app --runtime-root ~/.local/share/agentx --working-dir ~ --model-provider ollama --ollama-base-url http://127.0.0.1:11434 --api-host 0.0.0.0 --api-port 8420 --web-host 0.0.0.0 --web-port 5173 --web-enabled true --service-mode none
+agentx start
+```
+
+Then get the WSL IP:
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+Open `http://<wsl-ip>:5173` from Windows.

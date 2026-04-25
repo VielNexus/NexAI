@@ -17,7 +17,7 @@ Key capabilities:
 For a fresh Ubuntu 24 machine, use the repo-root installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VielAgentX/AgentX/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/VielNexus/NexAI/main/install.sh | bash
 ```
 
 That wrapper installs system prerequisites, clones the repo, builds `AgentXWeb/dist`, and then hands off to the bundle-local bootstrap script:
