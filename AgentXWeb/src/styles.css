@@ -1028,7 +1028,15 @@ button {
 
 .agentx-dropdown--fit .agentx-dropdown__value,
 .agentx-dropdown--fit .agentx-dropdown__placeholder,
-.agentx-dropdown--fit .agentx-dropdown__option {
+.agentx-dropdown--fit 
+.agentx-dropdown__menu--portal {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  z-index: 10000;
+}
+
+.agentx-dropdown__option {
   white-space: nowrap;
 }
 

@@ -1,4 +1,5 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type AgentXDropdownOption = {
   label: string;
@@ -29,28 +30,73 @@ export function AgentXDropdown({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = useId();
+
   const enabledOptions = useMemo(() => options.filter((option) => !option.disabled), [options]);
   const selectedOption = options.find((option) => option.value === value);
+
   const fitWidthCh = useMemo(() => {
     const longestOption = options.reduce((longest, option) => Math.max(longest, option.label.length), 0);
     const longestText = Math.max(longestOption, placeholder.length, selectedOption?.label.length ?? 0);
     return Math.min(Math.max(longestText + 5, 18), 44);
   }, [options, placeholder, selectedOption?.label]);
 
+  const updateMenuPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button || typeof window === "undefined") return;
+
+    const rect = button.getBoundingClientRect();
+    const viewportGap = 10;
+    const menuGap = 7;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const spaceBelow = viewportHeight - rect.bottom - viewportGap;
+    const spaceAbove = rect.top - viewportGap;
+    const openAbove = spaceBelow < 192 && spaceAbove > spaceBelow;
+
+    const availableHeight = Math.max(160, openAbove ? spaceAbove - menuGap : spaceBelow - menuGap);
+    const maxHeight = Math.min(288, availableHeight);
+    const width = Math.max(rect.width, 160);
+    const left = Math.min(Math.max(viewportGap, rect.left), Math.max(viewportGap, viewportWidth - width - viewportGap));
+    const top = openAbove
+      ? Math.max(viewportGap, rect.top - maxHeight - menuGap)
+      : Math.min(rect.bottom + menuGap, viewportHeight - maxHeight - viewportGap);
+
+    setMenuPosition({ top, left, width, maxHeight });
+  }, []);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+
+    updateMenuPosition();
+
     const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || listRef.current?.contains(target)) return;
+      setOpen(false);
     };
+
+    const onReposition = () => updateMenuPosition();
+
     document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open]);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -72,18 +118,22 @@ export function AgentXDropdown({
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
+
     if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
       setOpen(true);
       return;
     }
+
     if (!open) return;
+
     if (event.key === "Escape") {
       event.preventDefault();
       setOpen(false);
       buttonRef.current?.focus();
       return;
     }
+
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setHighlightedIndex((current) => {
@@ -92,6 +142,7 @@ export function AgentXDropdown({
       });
       return;
     }
+
     if (event.key === "ArrowUp") {
       event.preventDefault();
       setHighlightedIndex((current) => {
@@ -100,12 +151,67 @@ export function AgentXDropdown({
       });
       return;
     }
+
     if (event.key === "Enter") {
       event.preventDefault();
       const option = enabledOptions[highlightedIndex];
       if (option) commit(option.value);
     }
   };
+
+  const menu =
+    open && menuPosition && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={listRef}
+            id={listboxId}
+            className="agentx-dropdown__menu agentx-dropdown__menu--portal"
+            role="listbox"
+            aria-label={label ?? placeholder}
+            style={{
+              top: menuPosition.top,
+              left: menuPosition.left,
+              width: menuPosition.width,
+              maxHeight: menuPosition.maxHeight,
+            }}
+          >
+            {options.map((option) => {
+              const enabledIndex = enabledOptions.findIndex((item) => item.value === option.value);
+              const isSelected = option.value === value;
+              const isHighlighted = enabledIndex >= 0 && enabledIndex === highlightedIndex;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  data-dropdown-index={enabledIndex >= 0 ? enabledIndex : undefined}
+                  disabled={option.disabled}
+                  className={[
+                    "agentx-dropdown__option",
+                    isSelected ? "agentx-dropdown__option--selected" : "",
+                    isHighlighted ? "agentx-dropdown__option--highlighted" : "",
+                    option.disabled ? "agentx-dropdown__option--disabled" : "",
+                  ]
+                    .join(" ")
+                    .trim()}
+                  onMouseEnter={() => {
+                    if (!option.disabled && enabledIndex >= 0) setHighlightedIndex(enabledIndex);
+                  }}
+                  onClick={() => {
+                    if (!option.disabled) commit(option.value);
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {isSelected ? <span className="agentx-dropdown__check">•</span> : null}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div
@@ -116,10 +222,13 @@ export function AgentXDropdown({
         open ? "agentx-dropdown--open" : "",
         disabled ? "agentx-dropdown--disabled" : "",
         fitToOptions ? "agentx-dropdown--fit" : "",
-      ].join(" ").trim()}
+      ]
+        .join(" ")
+        .trim()}
       style={fitToOptions ? ({ ["--agentx-dropdown-fit-ch" as string]: `${fitWidthCh}ch` } as React.CSSProperties) : undefined}
     >
       {label ? <div className="agentx-dropdown__label">{label}</div> : null}
+
       <button
         ref={buttonRef}
         type="button"
@@ -142,40 +251,8 @@ export function AgentXDropdown({
           </svg>
         </span>
       </button>
-      {open ? (
-        <div ref={listRef} id={listboxId} className="agentx-dropdown__menu" role="listbox" aria-label={label ?? placeholder}>
-          {options.map((option) => {
-            const enabledIndex = enabledOptions.findIndex((item) => item.value === option.value);
-            const isSelected = option.value === value;
-            const isHighlighted = enabledIndex >= 0 && enabledIndex === highlightedIndex;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                data-dropdown-index={enabledIndex >= 0 ? enabledIndex : undefined}
-                disabled={option.disabled}
-                className={[
-                  "agentx-dropdown__option",
-                  isSelected ? "agentx-dropdown__option--selected" : "",
-                  isHighlighted ? "agentx-dropdown__option--highlighted" : "",
-                  option.disabled ? "agentx-dropdown__option--disabled" : "",
-                ].join(" ").trim()}
-                onMouseEnter={() => {
-                  if (!option.disabled && enabledIndex >= 0) setHighlightedIndex(enabledIndex);
-                }}
-                onClick={() => {
-                  if (!option.disabled) commit(option.value);
-                }}
-              >
-                <span>{option.label}</span>
-                {isSelected ? <span className="agentx-dropdown__check">•</span> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+
+      {menu}
     </div>
   );
 }
