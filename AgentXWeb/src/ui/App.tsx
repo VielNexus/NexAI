@@ -359,8 +359,9 @@ export function App() {
     } else {
       options.push(...modelOptions.ollama.map((model) => ({ value: `ollama:${model}`, label: model })));
     }
-    options.push({ value: "__label_stub__", label: "Stub", disabled: true });
-    options.push({ value: "stub:stub", label: "stub" });
+    if (chatProvider === "stub" && chatModel === "stub") {
+      options.push({ value: "stub:stub", label: "No model selected", disabled: true });
+    }
     return options;
   }, [chatModel, chatProvider, modelOptions.isSelectedValid, modelOptions.ollama, modelOptions.openai, modelOptions.refreshing, modelOptions.selectedKey, modelsError, ollamaBaseUrl]);
 
@@ -1240,9 +1241,9 @@ export function App() {
           </div>
         </Panel>
 
-        <Panel className="rounded-[1.4rem] bg-slate-950/54 p-3 text-sm">
+        <Panel className="rounded-[1.4rem] bg-slate-950/54 p-3 text-sm agentx-settings-menu">
           <div className="flex items-center justify-between gap-3">
-            <div className={tokens.smallLabel}>Pages</div>
+            <div className={tokens.smallLabel}>Menu</div>
             {authEnabled && auth ? (
               <button className={tokens.button} onClick={signOut} title="Sign out">
                 Sign out
@@ -1259,13 +1260,14 @@ export function App() {
                 setActiveView("chat");
                 onAfterNavAction();
               }}
+              title="Open chats"
             >
-              Chat
+              ☰ Chats
             </button>
             <button
               className={[
                 "w-full rounded-xl border px-3 py-2 text-left text-sm font-medium transition",
-                activeView === "settings"
+                activeView === "settings" || activeView === "customization"
                   ? "border-cyan-400/30 bg-slate-900 text-cyan-50"
                   : "border-slate-800 bg-slate-950/70 text-slate-200 hover:bg-slate-900/80",
               ].join(" ")}
@@ -1273,22 +1275,9 @@ export function App() {
                 setActiveView("settings");
                 onAfterNavAction();
               }}
+              title="Settings and customization"
             >
-              Settings
-            </button>
-            <button
-              className={[
-                "w-full rounded-xl border px-3 py-2 text-left text-sm font-medium transition",
-                activeView === "customization"
-                  ? "border-cyan-400/30 bg-slate-900 text-cyan-50"
-                  : "border-slate-800 bg-slate-950/70 text-slate-200 hover:bg-slate-900/80",
-              ].join(" ")}
-              onClick={() => {
-                setActiveView("customization");
-                onAfterNavAction();
-              }}
-            >
-              Customization
+              ⋯ Settings
             </button>
           </div>
           {authEnabled === false ? <div className="mt-2 text-xs text-slate-500">Local mode active</div> : null}
@@ -1444,7 +1433,7 @@ export function App() {
                   aria-label="Open navigation"
                   title="Open navigation"
                 >
-                  Menu
+                  ☰
                 </button>
               ) : null}
               <div className="min-w-0">
@@ -1452,21 +1441,17 @@ export function App() {
                   <BrandBadge compact />
                   <div className="min-w-0">
                     <div className={theme.copy.title}>
-                      {activeView === "settings"
+                      {activeView === "settings" || activeView === "customization"
                         ? "Settings"
-                        : activeView === "customization"
-                          ? "Customization"
                         : activeThread
                           ? activeThread.title || config.threadTitleDefault
                           : "Chat"}
                       {activeProject ? <span className="text-xs font-normal text-slate-500">{` - ${activeProject.name}`}</span> : null}
                     </div>
                     <div className={theme.copy.muted}>
-                      {activeView === "settings"
-                        ? "Refine local settings and model behavior."
-                        : activeView === "customization"
-                          ? "Shape identity and appearance without touching model configuration."
-                          : `Direct channel into ${assistantDisplayName}.`}
+                      {activeView === "settings" || activeView === "customization"
+                        ? "Provider, appearance, layout, and local behavior."
+                        : `Direct channel into ${assistantDisplayName}.`}
                     </div>
                   </div>
                 </div>
@@ -1474,6 +1459,14 @@ export function App() {
             </div>
             <div className="agentx-topbar__controls">
               {isMobile ? <StatusPill ok={statusOk} label="API" /> : null}
+              <button
+                className={tokens.buttonSecondary}
+                type="button"
+                onClick={() => setActiveView(activeView === "settings" ? "chat" : "settings")}
+                title="Settings and customization"
+              >
+                ⋯
+              </button>
               {activeView === "chat" ? (
                 <label className="agentx-topbar__field text-xs text-slate-400">
                   <span>Model:</span>
@@ -1515,8 +1508,8 @@ export function App() {
           </div>
           ) : null}
 
-          {activeView === "settings" ? (
-            <div className="mt-3 min-h-0 flex-1">
+          {activeView === "settings" || activeView === "customization" ? (
+            <div className="mt-3 grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <SettingsPage
                 statusOk={statusOk}
                 status={{
@@ -1531,9 +1524,6 @@ export function App() {
                 onSettingsSaved={handleSettingsSaved}
                 onSystemMessage={setSystemMessage}
               />
-            </div>
-          ) : activeView === "customization" ? (
-            <div className="mt-3 min-h-0 flex-1">
               <CustomizationPage
                 statusOk={statusOk}
                 settings={appSettings}

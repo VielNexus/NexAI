@@ -199,7 +199,8 @@ def test_save_settings_normalizes_ollama_url(monkeypatch, tmp_path: Path) -> Non
 def test_effective_ollama_request_timeout_uses_settings_override() -> None:
     settings = SettingsModel(ollamaRequestTimeoutS=120)
     assert effective_ollama_request_timeout_s(settings) == 120
-    assert effective_ollama_request_timeout_s(SettingsModel(ollamaRequestTimeoutS=1)) == 5
+    assert effective_ollama_request_timeout_s(SettingsModel(ollamaRequestTimeoutS=1)) == 1
+    assert effective_ollama_request_timeout_s(SettingsModel(ollamaRequestTimeoutS=3600)) == 3600
 
 
 def test_save_settings_persists_customization_fields(monkeypatch, tmp_path: Path) -> None:

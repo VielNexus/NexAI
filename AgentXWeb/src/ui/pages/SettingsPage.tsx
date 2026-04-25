@@ -19,10 +19,11 @@ export function SettingsPage(props: Props) {
   const [settings, setSettings] = useState<AgentXSettings>(DEFAULT_AGENTX_SETTINGS);
   const [error, setError] = useState<string | null>(null);
 
-  const provider = (settings?.chatProvider ?? props.status.chat_provider ?? "stub").toString();
-  const model = (settings?.chatModel ?? props.status.chat_model ?? "stub").toString();
+  const rawProvider = (settings?.chatProvider ?? props.status.chat_provider ?? "ollama").toString().toLowerCase();
+  const provider = rawProvider === "openai" || rawProvider === "ollama" ? rawProvider : "ollama";
+  const model = (settings?.chatModel ?? props.status.chat_model ?? "").toString();
   const ollamaBaseUrl = (settings?.ollamaBaseUrl ?? props.status.ollama_base_url ?? "http://127.0.0.1:11434").toString();
-  const ollamaRequestTimeoutS = Math.max(5, Number(settings?.ollamaRequestTimeoutS ?? DEFAULT_AGENTX_SETTINGS.ollamaRequestTimeoutS));
+  const ollamaRequestTimeoutS = Math.max(1, Number(settings?.ollamaRequestTimeoutS ?? DEFAULT_AGENTX_SETTINGS.ollamaRequestTimeoutS));
 
   const modelOptions = useMemo(() => {
     const openai = Array.isArray(props.status.available_chat_models?.openai) ? props.status.available_chat_models.openai : [];
@@ -32,9 +33,8 @@ export function SettingsPage(props: Props) {
 
   const providerOptions = useMemo<AgentXDropdownOption[]>(
     () => [
-      { value: "openai", label: "openai" },
       { value: "ollama", label: "ollama" },
-      { value: "stub", label: "stub" },
+      { value: "openai", label: "openai" },
     ],
     []
   );
@@ -50,7 +50,7 @@ export function SettingsPage(props: Props) {
       }
       return modelOptions.ollama.map((item) => ({ value: item, label: item }));
     }
-    return [{ value: "stub", label: "stub" }];
+    return [{ value: "__none__", label: "Select a provider first", disabled: true }];
   }, [modelOptions.ollama, modelOptions.openai, provider]);
 
   useEffect(() => {
@@ -110,10 +110,10 @@ export function SettingsPage(props: Props) {
                 onChange={(nextProvider) => {
                   const nextModel =
                     nextProvider === "openai"
-                      ? modelOptions.openai[0] ?? "stub"
+                      ? modelOptions.openai[0] ?? ""
                       : nextProvider === "ollama"
                         ? modelOptions.ollama[0] ?? ""
-                        : "stub";
+                        : "";
                   setSettings((prev) => ({ ...prev, chatProvider: nextProvider, chatModel: nextModel }));
                 }}
               />
@@ -145,17 +145,17 @@ export function SettingsPage(props: Props) {
                 value={Number.isFinite(ollamaRequestTimeoutS) ? ollamaRequestTimeoutS : DEFAULT_AGENTX_SETTINGS.ollamaRequestTimeoutS}
                 disabled={loading}
                 type="number"
-                min={5}
-                max={600}
+                min={1}
+                step={1}
                 onChange={(e) =>
                   setSettings((prev) => ({
                     ...prev,
-                    ollamaRequestTimeoutS: Math.max(5, Number(e.target.value || DEFAULT_AGENTX_SETTINGS.ollamaRequestTimeoutS)),
+                    ollamaRequestTimeoutS: Math.max(1, Number(e.target.value || DEFAULT_AGENTX_SETTINGS.ollamaRequestTimeoutS)),
                   }))
                 }
               />
               <div className={tokens.helperText}>
-                Applies to local Ollama generation requests. Increase this for slower local models to avoid premature timeouts.
+                Applies to local Ollama generation requests. Use larger values for big local models; there is no UI cap.
               </div>
 
               <button

@@ -48,7 +48,7 @@ def effective_ollama_request_timeout_s(settings: SettingsModel | None = None) ->
         timeout_s = float(raw) if raw is not None else float(getattr(config, "ollama_request_timeout_s", 60.0))
     except (TypeError, ValueError):
         timeout_s = float(getattr(config, "ollama_request_timeout_s", 60.0))
-    return max(5.0, timeout_s)
+    return max(1.0, timeout_s)
 
 _CACHE_LOCK = threading.Lock()
 _CACHED_SETTINGS: SettingsModel | None = None

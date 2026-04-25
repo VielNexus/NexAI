@@ -42,6 +42,14 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
 
   const effectiveLayout = normalizeLayoutSettings(draft.layout);
 
+  const updateDraft = (updater: (previous: AgentXSettings) => AgentXSettings) => {
+    setDraft((previous) => {
+      const next = normalizeCustomizationSettings(updater(previous));
+      onSettingsChange(next);
+      return next;
+    });
+  };
+
   const appearancePresetOptions = useMemo<AgentXDropdownOption[]>(
     () => [
       { value: "agentx", label: "AgentX" },
@@ -159,7 +167,7 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
                 className={tokens.input}
                 value={draft.assistantDisplayName ?? DEFAULT_AGENTX_SETTINGS.assistantDisplayName}
                 disabled={loading}
-                onChange={(e) => setDraft((prev) => ({ ...prev, assistantDisplayName: e.target.value }))}
+                onChange={(e) => updateDraft((prev) => ({ ...prev, assistantDisplayName: e.target.value }))}
                 placeholder="AgentX"
               />
               <div className={tokens.helperText}>
@@ -171,7 +179,7 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
                 className={tokens.input}
                 value={draft.userDisplayName ?? DEFAULT_AGENTX_SETTINGS.userDisplayName}
                 disabled={loading}
-                onChange={(e) => setDraft((prev) => ({ ...prev, userDisplayName: e.target.value }))}
+                onChange={(e) => updateDraft((prev) => ({ ...prev, userDisplayName: e.target.value }))}
                 placeholder="You"
               />
               <div className={tokens.helperText}>
@@ -188,7 +196,7 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
                 value={draft.appearancePreset ?? DEFAULT_AGENTX_SETTINGS.appearancePreset}
                 options={appearancePresetOptions}
                 disabled={loading}
-                onChange={(value) => setDraft((prev) => ({ ...prev, appearancePreset: value as AgentXSettings["appearancePreset"] }))}
+                onChange={(value) => updateDraft((prev) => ({ ...prev, appearancePreset: value as AgentXSettings["appearancePreset"] }))}
               />
 
               <label className={tokens.fieldLabel}>Accent Intensity</label>
@@ -196,7 +204,7 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
                 value={draft.accentIntensity ?? DEFAULT_AGENTX_SETTINGS.accentIntensity}
                 options={accentIntensityOptions}
                 disabled={loading}
-                onChange={(value) => setDraft((prev) => ({ ...prev, accentIntensity: value as AgentXSettings["accentIntensity"] }))}
+                onChange={(value) => updateDraft((prev) => ({ ...prev, accentIntensity: value as AgentXSettings["accentIntensity"] }))}
               />
 
               <label className={tokens.fieldLabel}>Density</label>
@@ -204,7 +212,7 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
                 value={draft.densityMode ?? DEFAULT_AGENTX_SETTINGS.densityMode}
                 options={densityModeOptions}
                 disabled={loading}
-                onChange={(value) => setDraft((prev) => ({ ...prev, densityMode: value as AgentXSettings["densityMode"] }))}
+                onChange={(value) => updateDraft((prev) => ({ ...prev, densityMode: value as AgentXSettings["densityMode"] }))}
               />
 
               <div className={tokens.helperText}>
