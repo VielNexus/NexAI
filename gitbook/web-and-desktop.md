@@ -1,15 +1,15 @@
 # Web And Desktop Apps
 
-## SolWeb
+## AgentXWeb
 
-`SolWeb` is the main browser interface. It is a React 18 and Vite app with Tailwind CSS, TypeScript, Vitest, and a typed API client.
+`AgentXWeb` is the main browser interface. It is a React 18 and Vite app with Tailwind CSS, TypeScript, Vitest, and a typed API client.
 
-SolWeb uses the Vite 8 toolchain and requires Node.js 20.19+ on Node 20, or Node.js 22.12+ or newer.
+AgentXWeb uses the Vite 8 toolchain and requires Node.js 20.19+ on Node 20, or Node.js 22.12+ or newer.
 
 Common commands:
 
 ```bash
-cd SolWeb
+cd AgentXWeb
 npm install
 npm run dev
 npm run build
@@ -18,14 +18,14 @@ npm run typecheck
 npm run preview
 ```
 
-The production installer builds `SolWeb/dist` and serves it through the managed web service.
+The production installer builds `AgentXWeb/dist` and serves it through the managed web service.
 
-## SolWeb Runtime Config
+## AgentXWeb Runtime Config
 
-`SolWeb/public/solweb.config.js` controls the API base URL without rebuilding:
+`AgentXWeb/public/agentxweb.config.js` controls the API base URL without rebuilding:
 
 ```js
-window.__SOLWEB_CONFIG__ = {
+window.__AGENTXWEB_CONFIG__ = {
   apiBase: "http://127.0.0.1:8420",
   showInspector: undefined
 };
@@ -57,7 +57,7 @@ The web client includes:
 The typed client lives at:
 
 ```text
-SolWeb/src/api/client.ts
+AgentXWeb/src/api/client.ts
 ```
 
 It handles:
@@ -94,8 +94,8 @@ Important defaults:
 
 | Setting | Value |
 | --- | --- |
-| Product name | `Sol` |
-| Identifier | `com.sol.desktop` |
+| Product name | `AgentX` |
+| Identifier | `com.agentx.desktop` |
 | Dev URL | `http://localhost:1420` |
 | Window size | `1200x800` |
 

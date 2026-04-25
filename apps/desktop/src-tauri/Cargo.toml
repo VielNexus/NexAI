@@ -1,8 +1,8 @@
 [package]
-name = "sol-desktop"
+name = "agentx-desktop"
 version = "0.0.1"
-description = "Sol Desktop"
-authors = ["Sol"]
+description = "AgentX Desktop"
+authors = ["AgentX"]
 edition = "2021"
 
 [build-dependencies]

@@ -4,9 +4,9 @@
 
 ```text
 User
-  -> SolWeb or CLI
+  -> AgentXWeb or CLI
   -> FastAPI /v1 routes
-  -> SolVersion2 bridge
+  -> AgentX bridge
   -> Agent runtime
   -> Tool registry / LLM / memory / audit
   -> Response back to UI or CLI
@@ -18,14 +18,14 @@ The preferred runtime path is:
 UI -> API -> Agent -> Tools -> Audit -> Memory
 ```
 
-The API keeps legacy fallback logic for OpenAI/Ollama chat when the SolVersion2 bridge is unavailable, but the main design favors the unified agent path.
+The API keeps legacy fallback logic for OpenAI/Ollama chat when the AgentX bridge is unavailable, but the main design favors the unified agent path.
 
 ## Core Runtime Construction
 
-`SolVersion2/sol/runtime/bootstrap.py` builds a `RuntimeServices` object containing:
+`AgentX/agentx/runtime/bootstrap.py` builds a `RuntimeServices` object containing:
 
 - Parsed config.
-- `SolContext`.
+- `AgentXContext`.
 - `ToolRegistry`.
 - `Agent`.
 - Runtime paths.
@@ -38,7 +38,7 @@ During startup it creates runtime directories for data, logs, config, run state,
 
 ## Agent Model
 
-The agent in `SolVersion2/sol/core/agent.py` is supervised-only by default.
+The agent in `AgentX/agentx/core/agent.py` is supervised-only by default.
 
 The core pattern is:
 
@@ -57,7 +57,7 @@ Important behaviors:
 
 ## FastAPI Service
 
-`apps/api/sol_api/app.py` creates the service and mounts routers:
+`apps/api/agentx_api/app.py` creates the service and mounts routers:
 
 - `status`
 - `auth`
@@ -67,18 +67,18 @@ Important behaviors:
 - `unsafe`
 - `rag`
 - `fs`
-- `solv2`
+- `agentx`
 
 The API includes CORS origins for localhost web dev, localhost static hosting, and Tauri origins.
 
-## SolVersion2 Bridge
+## AgentX Bridge
 
-`apps/api/sol_api/solv2_bridge.py` imports `SolVersion2` dynamically from the app root, initializes runtime services, and exposes handles to routes.
+`apps/api/agentx_api/agentx_bridge.py` imports `AgentX` dynamically from the app root, initializes runtime services, and exposes handles to routes.
 
 Bridge behavior:
 
-- Uses `SOL_APP_ROOT` if set; otherwise resolves the repo root.
-- Uses `SOL_CONFIG_PATH` if set; otherwise uses `SolVersion2/config/sol.toml`.
+- Uses `AGENTX_APP_ROOT` if set; otherwise resolves the repo root.
+- Uses `AGENTX_CONFIG_PATH` if set; otherwise uses `AgentX/config/agentx.toml`.
 - Caches one global runtime handle.
 - Creates per-request agents for thread/user-specific context.
 - Supports per-session web domain allowlists.
@@ -90,9 +90,9 @@ Important state locations:
 
 | State | Location |
 | --- | --- |
-| API settings | `SOL_API_DATA_DIR/settings.json` or API package data dir |
-| API threads | `SOL_API_DATA_DIR/threads` or API package data dir |
-| API RAG DB | `SOL_API_DATA_DIR/rag.sqlite3` |
+| API settings | `AGENTX_API_DATA_DIR/settings.json` or API package data dir |
+| API threads | `AGENTX_API_DATA_DIR/threads` or API package data dir |
+| API RAG DB | `AGENTX_API_DATA_DIR/rag.sqlite3` |
 | Runtime audit log | Configured by `[audit].log_path` |
 | Runtime memory DB | Configured by `[memory].db_path` |
 | Runtime memory events | Configured by `[memory].events_path` |
@@ -102,10 +102,10 @@ Important state locations:
 
 ## Client Architecture
 
-SolWeb is a thin client:
+AgentXWeb is a thin client:
 
 - It stores auth session data in browser `localStorage`.
-- It calls the API through `SolWeb/src/api/client.ts`.
+- It calls the API through `AgentXWeb/src/api/client.ts`.
 - It does not own providers, tools, or config policy.
 - It sends active artifact context for code canvas/file/tool-output-aware chat.
 

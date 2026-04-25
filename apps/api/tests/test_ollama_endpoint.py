@@ -9,10 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from sol_api.ollama import fetch_ollama_models, normalize_ollama_base_url
-from sol_api.routes.chat import ChatRequest, _ollama_generate, chat
-from sol_api.routes.settings import SettingsModel, effective_ollama_base_url, effective_ollama_request_timeout_s, save_settings
-from sol_api.routes.status import status
+from agentx_api.ollama import fetch_ollama_models, normalize_ollama_base_url
+from agentx_api.routes.chat import ChatRequest, _ollama_generate, chat
+from agentx_api.routes.settings import SettingsModel, effective_ollama_base_url, effective_ollama_request_timeout_s, save_settings
+from agentx_api.routes.status import status
 
 
 class _FakeResponse:
@@ -57,7 +57,7 @@ def test_ollama_generate_uses_configured_settings_url(monkeypatch) -> None:
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
     monkeypatch.setattr(
-        "sol_api.routes.chat._read_settings",
+        "agentx_api.routes.chat._read_settings",
         lambda: SettingsModel(
             chatProvider="ollama",
             chatModel="llama3.2",
@@ -82,7 +82,7 @@ def test_ollama_generate_returns_structured_provider_http_error(monkeypatch) -> 
         )
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2", ollamaBaseUrl="http://10.0.0.44:11434"))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2", ollamaBaseUrl="http://10.0.0.44:11434"))
     with pytest.raises(Exception) as excinfo:
         _ollama_generate("hi", "llama3.2")
     payload = excinfo.value.detail
@@ -96,7 +96,7 @@ def test_ollama_generate_returns_structured_timeout(monkeypatch) -> None:
         raise socket.timeout("timed out")
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
     with pytest.raises(Exception) as excinfo:
         _ollama_generate("hi", "qwen3.5:9b")
     payload = excinfo.value.detail
@@ -116,7 +116,7 @@ def test_ollama_generate_returns_structured_model_missing(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
     with pytest.raises(Exception) as excinfo:
         _ollama_generate("hi", "qwen3.5:9b")
     payload = excinfo.value.detail
@@ -125,13 +125,13 @@ def test_ollama_generate_returns_structured_model_missing(monkeypatch) -> None:
 
 
 def test_status_reports_configured_ollama_endpoint_error(monkeypatch) -> None:
-    monkeypatch.setattr("sol_api.routes.status._ensure_model_cache", lambda force=False: None)
-    monkeypatch.setattr("sol_api.routes.status._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="", ollamaBaseUrl="http://10.0.0.44:11434"))
-    monkeypatch.setattr("sol_api.routes.status._MODEL_CACHE", {"openai": [], "ollama": []})
-    monkeypatch.setattr("sol_api.routes.status._MODEL_LAST_REFRESH", 1.0)
-    monkeypatch.setattr("sol_api.routes.status._MODEL_REFRESHING", False)
+    monkeypatch.setattr("agentx_api.routes.status._ensure_model_cache", lambda force=False: None)
+    monkeypatch.setattr("agentx_api.routes.status._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="", ollamaBaseUrl="http://10.0.0.44:11434"))
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_CACHE", {"openai": [], "ollama": []})
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_LAST_REFRESH", 1.0)
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_REFRESHING", False)
     monkeypatch.setattr(
-        "sol_api.routes.status._MODEL_LAST_ERROR",
+        "agentx_api.routes.status._MODEL_LAST_ERROR",
         "Configured Ollama endpoint could not be reached: http://10.0.0.44:11434 (connection refused)",
     )
     res = status(refresh=False)
@@ -144,12 +144,12 @@ def test_status_reports_configured_ollama_endpoint_error(monkeypatch) -> None:
 
 
 def test_status_reports_model_missing(monkeypatch) -> None:
-    monkeypatch.setattr("sol_api.routes.status._ensure_model_cache", lambda force=False: None)
-    monkeypatch.setattr("sol_api.routes.status._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
-    monkeypatch.setattr("sol_api.routes.status._MODEL_CACHE", {"openai": [], "ollama": ["llama3.2"]})
-    monkeypatch.setattr("sol_api.routes.status._MODEL_LAST_REFRESH", 1.0)
-    monkeypatch.setattr("sol_api.routes.status._MODEL_REFRESHING", False)
-    monkeypatch.setattr("sol_api.routes.status._MODEL_LAST_ERROR", None)
+    monkeypatch.setattr("agentx_api.routes.status._ensure_model_cache", lambda force=False: None)
+    monkeypatch.setattr("agentx_api.routes.status._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="qwen3.5:9b", ollamaBaseUrl="http://10.0.0.44:11434"))
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_CACHE", {"openai": [], "ollama": ["llama3.2"]})
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_LAST_REFRESH", 1.0)
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_REFRESHING", False)
+    monkeypatch.setattr("agentx_api.routes.status._MODEL_LAST_ERROR", None)
     res = status(refresh=False)
     assert res.chat_ready is False
     assert res.provider_endpoint_status == "reachable"
@@ -180,8 +180,8 @@ def test_chat_spoken_mode_sanitizes_agent_output(monkeypatch) -> None:
                 tool_results=tuple(),
             )
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2", ollamaBaseUrl="http://127.0.0.1:11434"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2", ollamaBaseUrl="http://127.0.0.1:11434"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
     response = chat(ChatRequest(message="hi", thread_id="thread-1", response_mode="spoken"), SimpleNamespace(headers={}, client=None))
     assert captured["response_mode"] == "spoken"
     assert response.content == "Hello there."
@@ -189,7 +189,7 @@ def test_chat_spoken_mode_sanitizes_agent_output(monkeypatch) -> None:
 
 def test_save_settings_normalizes_ollama_url(monkeypatch, tmp_path: Path) -> None:
     settings_path = tmp_path / "settings.json"
-    monkeypatch.setattr("sol_api.routes.settings.config.settings_path", settings_path)
+    monkeypatch.setattr("agentx_api.routes.settings.config.settings_path", settings_path)
     saved = save_settings(SettingsModel(chatProvider="ollama", chatModel="llama3.2", ollamaBaseUrl="10.0.0.44:11434/"))
     assert saved.ollamaBaseUrl == "http://10.0.0.44:11434"
     raw = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -204,7 +204,7 @@ def test_effective_ollama_request_timeout_uses_settings_override() -> None:
 
 def test_save_settings_persists_customization_fields(monkeypatch, tmp_path: Path) -> None:
     settings_path = tmp_path / "settings.json"
-    monkeypatch.setattr("sol_api.routes.settings.config.settings_path", settings_path)
+    monkeypatch.setattr("agentx_api.routes.settings.config.settings_path", settings_path)
     saved = save_settings(
         SettingsModel(
             assistantDisplayName="Orion",

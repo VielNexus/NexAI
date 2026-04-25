@@ -18,8 +18,8 @@ else
 fi
 
 header() {
-  printf '%s\n' "${C_HEAD}NexAI Ubuntu installer${C_RESET}"
-  printf '%s\n' "${C_INFO}Fresh-machine bootstrap for the NexAI app bundle and managed runtime${C_RESET}"
+  printf '%s\n' "${C_HEAD}AgentX Ubuntu installer${C_RESET}"
+  printf '%s\n' "${C_INFO}Fresh-machine bootstrap for the AgentX app bundle and managed runtime${C_RESET}"
   printf '\n'
 }
 
@@ -40,24 +40,47 @@ ok() {
   printf '%s\n' "${C_OK}$1${C_RESET}"
 }
 
+env_value() {
+  local name="$1"
+  local default="${2:-}"
+  local value="${!name-}"
+  if [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  if [[ "$name" == AGENTX_* ]]; then
+    local suffix="${name#AGENTX_}"
+    local legacy_name="NEXAI_${suffix}"
+    local legacy_value="${!legacy_name-}"
+    if [[ -n "$legacy_value" ]]; then
+      printf '%s\n' "$legacy_value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$default"
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--help]
 
-Fresh Ubuntu 24 installer for NexAI.
+Fresh Ubuntu 24 installer for AgentX.
 
 Environment overrides:
-  NEXAI_REPO_URL          Git clone URL (default: https://github.com/VielNexus/NexAI.git)
-  NEXAI_REF               Git ref to install (default: main)
-  NEXAI_APP_ROOT          App bundle path (default: ~/.local/share/nexai/app)
-  NEXAI_RUNTIME_ROOT      Mutable runtime root (default: ~/.local/share/sol)
-  NEXAI_WORKDIR           Working directory for NexAI tools (default: $HOME)
-  NEXAI_PROFILE           Install profile passed to `nexai setup` (default: standard)
-  NEXAI_MODEL_PROVIDER    Model provider for setup (default: ollama)
-  NEXAI_OLLAMA_BASE_URL   Ollama URL for setup (default: http://127.0.0.1:11434)
-  NEXAI_SKIP_APT          Set to 1 to skip apt package installation
-  NEXAI_SKIP_WEB_BUILD    Set to 1 to skip SolWeb npm install/build
-  NEXAI_AUTOSTART         Set to 1 to run `nexai start` after setup
+  AGENTX_REPO_URL          Git clone URL (default: https://github.com/VielAgentX/AgentX.git)
+  AGENTX_REF               Git ref to install (default: main)
+  AGENTX_APP_ROOT          App bundle path (default: ~/.local/share/agentx/app)
+  AGENTX_RUNTIME_ROOT      Mutable runtime root (default: ~/.local/share/agentx)
+  AGENTX_WORKDIR           Working directory for AgentX tools (default: $HOME)
+  AGENTX_PROFILE           Install profile passed to `agentx setup` (default: standard)
+  AGENTX_MODEL_PROVIDER    Model provider for setup (default: ollama)
+  AGENTX_OLLAMA_BASE_URL   Ollama URL for setup (default: http://127.0.0.1:11434)
+  AGENTX_SKIP_APT          Set to 1 to skip apt package installation
+  AGENTX_SKIP_WEB_BUILD    Set to 1 to skip AgentXWeb npm install/build
+  AGENTX_AUTOSTART         Set to 1 to run `agentx start` after setup
+
+Legacy NEXAI_* installer environment variables are still accepted as
+deprecated fallbacks when the matching AGENTX_* variable is unset.
 EOF
 }
 
@@ -110,8 +133,8 @@ apt_install_if_needed() {
   if ((${#missing[@]} == 0)); then
     return 0
   fi
-  if [[ "${NEXAI_SKIP_APT:-0}" == "1" ]]; then
-    die "error: missing required packages while NEXAI_SKIP_APT=1: ${missing[*]}"
+  if [[ "$(env_value AGENTX_SKIP_APT 0)" == "1" ]]; then
+    die "error: missing required packages while AGENTX_SKIP_APT=1: ${missing[*]}"
   fi
   local sudo_cmd=()
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -137,8 +160,8 @@ ensure_nodejs_supported() {
     return 0
   fi
 
-  if [[ "${NEXAI_SKIP_APT:-0}" == "1" ]]; then
-    die "error: Node.js 20.19+ or 22.12+ is required for the Vite 8 toolchain, but the current version is unsupported and NEXAI_SKIP_APT=1."
+  if [[ "$(env_value AGENTX_SKIP_APT 0)" == "1" ]]; then
+    die "error: Node.js 20.19+ or 22.12+ is required for the Vite 8 toolchain, but the current version is unsupported and AGENTX_SKIP_APT=1."
   fi
 
   local sudo_cmd=()
@@ -147,7 +170,7 @@ ensure_nodejs_supported() {
     sudo_cmd=(sudo)
   fi
 
-  info "Installing a Node.js runtime compatible with Vite 8 for SolWeb..."
+  info "Installing a Node.js runtime compatible with Vite 8 for AgentXWeb..."
   "${sudo_cmd[@]}" mkdir -p /etc/apt/keyrings
   curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | "${sudo_cmd[@]}" gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | "${sudo_cmd[@]}" tee /etc/apt/sources.list.d/nodesource.list >/dev/null
@@ -189,7 +212,7 @@ prepare_repo_checkout() {
     if [[ "$existing_remote" != "$repo_url" ]]; then
       die "error: ${app_root} already exists but points to a different git remote: ${existing_remote}"
     fi
-    info "Updating existing NexAI checkout..."
+    info "Updating existing AgentX checkout..."
     git -C "$app_root" fetch --tags origin
     git -C "$app_root" checkout "$ref"
     if git -C "$app_root" rev-parse --verify "origin/$ref" >/dev/null 2>&1; then
@@ -200,25 +223,25 @@ prepare_repo_checkout() {
   fi
 
   if [[ -e "$app_root" ]] && [[ -n "$(find "$app_root" -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)" ]]; then
-    die "error: app root exists and is not an empty NexAI checkout: ${app_root}"
+    die "error: app root exists and is not an empty AgentX checkout: ${app_root}"
   fi
 
-  info "Cloning NexAI repository..."
+  info "Cloning AgentX repository..."
   rm -rf "$app_root"
   git clone --branch "$ref" --depth 1 "$repo_url" "$app_root"
 }
 
-build_solweb() {
+build_agentxweb() {
   local app_root="$1"
-  if [[ "${NEXAI_SKIP_WEB_BUILD:-0}" == "1" ]]; then
-    warn "warning: skipping SolWeb build because NEXAI_SKIP_WEB_BUILD=1"
+  if [[ "$(env_value AGENTX_SKIP_WEB_BUILD 0)" == "1" ]]; then
+    warn "warning: skipping AgentXWeb build because AGENTX_SKIP_WEB_BUILD=1"
     return 0
   fi
-  info "Installing SolWeb dependencies..."
-  rm -rf "$app_root/SolWeb/node_modules"
-  npm --prefix "$app_root/SolWeb" install
-  info "Building SolWeb production assets..."
-  npm --prefix "$app_root/SolWeb" run build
+  info "Installing AgentXWeb dependencies..."
+  rm -rf "$app_root/AgentXWeb/node_modules"
+  npm --prefix "$app_root/AgentXWeb" install
+  info "Building AgentXWeb production assets..."
+  npm --prefix "$app_root/AgentXWeb" run build
 }
 
 run_bootstrap_install() {
@@ -229,8 +252,8 @@ run_bootstrap_install() {
   local provider="$5"
   local ollama_url="$6"
 
-  info "Running NexAI bootstrap + managed runtime setup..."
-  bash "$app_root/install-sol.sh" -- \
+  info "Running AgentX bootstrap + managed runtime setup..."
+  bash "$app_root/install-agentx.sh" -- \
     --non-interactive \
     --profile "$profile" \
     --app-root "$app_root" \
@@ -262,15 +285,23 @@ main() {
   ensure_linux
   ensure_supported_os
 
-  local repo_url="${NEXAI_REPO_URL:-https://github.com/VielNexus/NexAI.git}"
-  local ref="${NEXAI_REF:-main}"
+  local repo_url
+  repo_url="$(env_value AGENTX_REPO_URL "https://github.com/VielAgentX/AgentX.git")"
+  local ref
+  ref="$(env_value AGENTX_REF main)"
   local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-  local app_root="${NEXAI_APP_ROOT:-$data_home/nexai/app}"
-  local runtime_root="${NEXAI_RUNTIME_ROOT:-$data_home/sol}"
-  local working_dir="${NEXAI_WORKDIR:-$HOME}"
-  local profile="${NEXAI_PROFILE:-standard}"
-  local provider="${NEXAI_MODEL_PROVIDER:-ollama}"
-  local ollama_url="${NEXAI_OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+  local app_root
+  app_root="$(env_value AGENTX_APP_ROOT "$data_home/agentx/app")"
+  local runtime_root
+  runtime_root="$(env_value AGENTX_RUNTIME_ROOT "$data_home/agentx")"
+  local working_dir
+  working_dir="$(env_value AGENTX_WORKDIR "$HOME")"
+  local profile
+  profile="$(env_value AGENTX_PROFILE standard)"
+  local provider
+  provider="$(env_value AGENTX_MODEL_PROVIDER ollama)"
+  local ollama_url
+  ollama_url="$(env_value AGENTX_OLLAMA_BASE_URL "http://127.0.0.1:11434")"
 
   header
   printf '  Repo URL:       %s\n' "$repo_url"
@@ -290,21 +321,21 @@ main() {
   require_cmd npm
 
   prepare_repo_checkout "$app_root" "$repo_url" "$ref"
-  build_solweb "$app_root"
+  build_agentxweb "$app_root"
   run_bootstrap_install "$app_root" "$runtime_root" "$working_dir" "$profile" "$provider" "$ollama_url"
   ensure_local_bin_on_path_for_session
 
-  local launcher="nexai"
+  local launcher="agentx"
   printf '\n'
-  ok "NexAI install completed."
-  printf '  Launcher:       %s\n' "${HOME}/.local/bin/nexai"
+  ok "AgentX install completed."
+  printf '  Launcher:       %s\n' "${HOME}/.local/bin/agentx"
   printf '  App root:       %s\n' "$app_root"
   printf '  Runtime root:   %s\n' "$runtime_root"
   printf '\n'
-  ok "The 'nexai' command is ready to use. Run: nexai start"
+  ok "The 'agentx' command is ready to use. Run: agentx start"
 
-  if [[ "${NEXAI_AUTOSTART:-0}" == "1" ]]; then
-    info "Starting NexAI services..."
+  if [[ "$(env_value AGENTX_AUTOSTART 0)" == "1" ]]; then
+    info "Starting AgentX services..."
     "$launcher" start
   fi
 

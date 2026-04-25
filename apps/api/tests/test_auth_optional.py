@@ -4,11 +4,11 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from sol_api.app import create_app
-from sol_api.auth import session_store
-from sol_api.config import config
-from sol_api.rag.session import session_tracker
-import sol_api.routes.settings as settings_route
+from agentx_api.app import create_app
+from agentx_api.auth import session_store
+from agentx_api.config import config
+from agentx_api.rag.session import session_tracker
+import agentx_api.routes.settings as settings_route
 
 
 def test_local_mode_allows_protected_routes_without_login(monkeypatch, tmp_path: Path) -> None:
@@ -55,7 +55,7 @@ def test_login_route_reports_when_auth_is_disabled(monkeypatch, tmp_path: Path) 
     session_tracker.reset_for_tests()
 
     client = TestClient(create_app())
-    response = client.post("/v1/auth/login", json={"username": "nexus", "password": "ignored"})
+    response = client.post("/v1/auth/login", json={"username": "agentx", "password": "ignored"})
 
     assert response.status_code == 409, response.text
     assert response.json()["detail"] == "Authentication is disabled for this install."

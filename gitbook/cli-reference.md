@@ -3,17 +3,17 @@
 The Python package exposes two console scripts:
 
 ```text
-nexai
-sol
+agentx
+agentx
 ```
 
-`nexai` is the supported command. `sol` exists as a compatibility alias during migration.
+`agentx` is the supported command. `agentx` exists as a compatibility alias during migration.
 
 ## Global Options
 
 ```bash
-nexai --config config/sol.toml <command>
-nexai --install-config ~/.config/sol/install.json <command>
+agentx --config config/agentx.toml <command>
+agentx --install-config ~/.config/agentx/install.json <command>
 ```
 
 | Option | Meaning |
@@ -24,25 +24,25 @@ nexai --install-config ~/.config/sol/install.json <command>
 ## Lifecycle Commands
 
 ```bash
-nexai setup
-nexai start
-nexai stop
-nexai restart
-nexai status
-nexai uninstall
-nexai doctor
-nexai health
-nexai paths
+agentx setup
+agentx start
+agentx stop
+agentx restart
+agentx status
+agentx uninstall
+agentx doctor
+agentx health
+agentx paths
 ```
 
 ## Service Commands
 
 ```bash
-nexai service install
-nexai service uninstall
-nexai service enable
-nexai service disable
-nexai service status
+agentx service install
+agentx service uninstall
+agentx service enable
+agentx service disable
+agentx service status
 ```
 
 These manage systemd-user service files when the install uses systemd user services.
@@ -50,29 +50,29 @@ These manage systemd-user service files when the install uses systemd user servi
 ## Runtime And Config Inspection
 
 ```bash
-nexai runtime inspect
-nexai config show
-nexai logs api --tail 100
-nexai logs web --tail 100
+agentx runtime inspect
+agentx config show
+agentx logs api --tail 100
+agentx logs web --tail 100
 ```
 
 ## Chat And Task Execution
 
 ```bash
-nexai run "your task"
-nexai run --file task.txt
-cat task.txt | nexai run
-nexai run
+agentx run "your task"
+agentx run --file task.txt
+cat task.txt | agentx run
+agentx run
 ```
 
-`nexai run` sends the prompt to `/v1/chat` on the local API when an installed runtime is present.
+`agentx run` sends the prompt to `/v1/chat` on the local API when an installed runtime is present.
 
 ## Tool Execution
 
 Run a tool through the audited agent loop:
 
 ```bash
-nexai tool fs.list --reason "Inspect workspace" --json "{\"path\":\"F:/Sol Folder\"}"
+agentx tool fs.list --reason "Inspect workspace" --json "{\"path\":\"F:/AgentX Folder\"}"
 ```
 
 The CLI requires a non-empty `--reason` for tool calls. This is intentional because tool activity is audited.
@@ -80,7 +80,7 @@ The CLI requires a non-empty `--reason` for tool calls. This is intentional beca
 ## RAG Ingest
 
 ```bash
-nexai ingest --path ./docs --reason "Index project docs" --recursive --max_files 200
+agentx ingest --path ./docs --reason "Index project docs" --recursive --max_files 200
 ```
 
 The ingest command goes through the agent loop and stores content in the memory/RAG backend according to policy.
@@ -88,9 +88,9 @@ The ingest command goes through the agent loop and stores content in the memory/
 ## Memory Commands
 
 ```bash
-nexai memory stats --reason "Check memory size"
-nexai memory prune --older-than-days 30 --dry-run --reason "Review old memory cleanup"
-nexai memory prune --older-than-days 30 --reason "Clean old memory"
+agentx memory stats --reason "Check memory size"
+agentx memory prune --older-than-days 30 --dry-run --reason "Review old memory cleanup"
+agentx memory prune --older-than-days 30 --reason "Clean old memory"
 ```
 
 Non-dry-run pruning is destructive and is blocked by unsafe-mode policy unless explicitly enabled for the active thread/context.
@@ -98,20 +98,20 @@ Non-dry-run pruning is destructive and is blocked by unsafe-mode policy unless e
 ## Selfcheck
 
 ```bash
-nexai selfcheck --mode quick
-nexai selfcheck --mode full --json
-nexai selfcheck --mode full --fix
+agentx selfcheck --mode quick
+agentx selfcheck --mode full --json
+agentx selfcheck --mode full --fix
 ```
 
 ## Jobs
 
 ```bash
-nexai job create --goal "Inspect repository health" --max-steps 10
-nexai job run <job_id>
-nexai job show <job_id>
-nexai job cancel <job_id> --reason "No longer needed"
-nexai job approve <job_id>
-nexai job approve <job_id> --deny --note "Plan was too risky"
+agentx job create --goal "Inspect repository health" --max-steps 10
+agentx job run <job_id>
+agentx job show <job_id>
+agentx job cancel <job_id> --reason "No longer needed"
+agentx job approve <job_id>
+agentx job approve <job_id> --deny --note "Plan was too risky"
 ```
 
 Jobs are supervised. High-risk or destructive plans can block and require approval before continuing.
@@ -119,17 +119,17 @@ Jobs are supervised. High-risk or destructive plans can block and require approv
 ## Plugins
 
 ```bash
-nexai plugins list
-nexai plugins enable <plugin_id>
-nexai plugins disable <plugin_id>
+agentx plugins list
+agentx plugins enable <plugin_id>
+agentx plugins disable <plugin_id>
 ```
 
 ## Skills
 
 ```bash
-nexai skills list
-nexai skills import-pack ./path/to/skill-pack
-nexai skills import-pack ./path/to/skill-pack --skill-id custom_id
+agentx skills list
+agentx skills import-pack ./path/to/skill-pack
+agentx skills import-pack ./path/to/skill-pack --skill-id custom_id
 ```
 
 Skill packs must contain `SKILL.md`.

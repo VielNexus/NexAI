@@ -3,7 +3,7 @@
 * [Overview](README.md)
 * [Repository Map](repository-map.md)
 * [Installation](installation.md)
-* [Running NexAI](running-nexai.md)
+* [Running AgentX](running-agentx.md)
 * [CLI Reference](cli-reference.md)
 * [Web And Desktop Apps](web-and-desktop.md)
 * [API Reference](api-reference.md)

@@ -1,5 +1,5 @@
 export const API_BASE = (() => {
-  const rawValue = import.meta.env.VITE_SOL_API as string | undefined;
+  const rawValue = import.meta.env.VITE_AGENTX_API as string | undefined;
   const trimmed = (rawValue ?? "").trim();
   if (trimmed.length > 0) {
     return trimmed;

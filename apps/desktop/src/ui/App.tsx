@@ -477,7 +477,7 @@ export function App() {
       <div className={["grid min-h-screen min-w-0 gap-3 p-4", gridColumnsClass].join(" ")}>
         <Panel className="flex min-h-0 flex-col gap-3 p-3">
           <div className="flex items-center justify-between rounded-xl border border-slate-200 p-2 text-sm font-semibold">
-            <span>Sol</span>
+            <span>AgentX</span>
             <StatusPill ok={isConnected} label={statusLabel} />
           </div>
           <Panel className="rounded-2xl border border-slate-200 p-3">

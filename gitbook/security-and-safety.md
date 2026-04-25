@@ -2,15 +2,15 @@
 
 ## Local-First Assumption
 
-NexAI is designed for local, user-controlled operation. The default API host is `127.0.0.1`, and fresh local installs default to auth disabled. Do not expose the API to a network unless you intentionally enable auth and review every filesystem, web, and execution setting.
+AgentX is designed for local, user-controlled operation. The default API host is `127.0.0.1`, and fresh local installs default to auth disabled. Do not expose the API to a network unless you intentionally enable auth and review every filesystem, web, and execution setting.
 
 ## Auth
 
-Auth is controlled by `SOL_AUTH_ENABLED` and install metadata `auth.enabled`.
+Auth is controlled by `AGENTX_AUTH_ENABLED` and install metadata `auth.enabled`.
 
 When disabled:
 
-- Login is not shown by SolWeb.
+- Login is not shown by AgentXWeb.
 - Protected endpoints accept a local synthetic identity.
 - This is suitable only for local-only operation.
 
@@ -19,7 +19,7 @@ When enabled:
 - `/v1/auth/login` issues a bearer token.
 - Protected routes require `Authorization: Bearer <token>`.
 - Tokens are stored in memory server-side and in browser local storage client-side.
-- Sessions expire after `SOL_AUTH_SESSION_TTL_S`.
+- Sessions expire after `AGENTX_AUTH_SESSION_TTL_S`.
 
 ## Supervised Mode
 
@@ -50,8 +50,8 @@ Audited actions include:
 
 There are two filesystem layers:
 
-- Runtime tool policy from `SolVersion2/config/sol.toml`.
-- API file policy from `SOL_FS_*` environment variables.
+- Runtime tool policy from `AgentX/config/agentx.toml`.
+- API file policy from `AGENTX_FS_*` environment variables.
 
 The API filesystem endpoints are disabled by default. Writes and deletes need additional flags even after file access is enabled.
 
@@ -99,7 +99,7 @@ The API exposes endpoints to update policy and to allow domains only for one thr
 API web fetching defaults to:
 
 ```text
-SOL_WEB_BLOCK_PRIVATE=true
+AGENTX_WEB_BLOCK_PRIVATE=true
 ```
 
 Keep this enabled unless you explicitly need internal-network access and understand the SSRF risk.
@@ -121,7 +121,7 @@ Treat command execution as high-risk. Keep command allowlists narrow.
 - Keep API binding on `127.0.0.1` for local installs.
 - Enable auth before exposing beyond localhost.
 - Keep filesystem API disabled unless needed.
-- Restrict `SOL_FS_ALLOWED_ROOTS`.
+- Restrict `AGENTX_FS_ALLOWED_ROOTS`.
 - Keep writes and deletes disabled unless needed.
 - Keep C drive or system directories denied.
 - Keep web private-network blocking enabled.

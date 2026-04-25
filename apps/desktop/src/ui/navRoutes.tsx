@@ -21,7 +21,7 @@ export const routeRegistry: RouteDefinition[] = [
     label: "Chat",
     section: "Workspace",
     description: "Conversations, threads, and chat history",
-    component: placeholder("Chat", "Use the chat view to talk with Sol and manage threads."),
+    component: placeholder("Chat", "Use the chat view to talk with AgentX and manage threads."),
   },
   {
     id: "settings",

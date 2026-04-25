@@ -1,6 +1,6 @@
 import { API_BASE } from "./api/client";
 
-export type SolSettings = {
+export type AgentXSettings = {
   showInspector: boolean;
   inspectorWindow: boolean;
   theme: "win11-light";
@@ -8,7 +8,7 @@ export type SolSettings = {
   chatModel: string;
 };
 
-export const DEFAULT_SETTINGS: SolSettings = {
+export const DEFAULT_SETTINGS: AgentXSettings = {
   showInspector: false,
   inspectorWindow: false,
   theme: "win11-light",
@@ -20,9 +20,9 @@ export const THREAD_TITLE_DEFAULT = "New thread";
 export const THREAD_TITLE_MAX = 64;
 export const THREAD_TITLE_WORD_LIMIT = 8;
 
-const STORAGE_KEY = "sol.ui.settings";
+const STORAGE_KEY = "agentx.ui.settings";
 
-function readLocalSettings(): SolSettings {
+function readLocalSettings(): AgentXSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -34,7 +34,7 @@ function readLocalSettings(): SolSettings {
   }
 }
 
-function writeLocalSettings(settings: SolSettings) {
+function writeLocalSettings(settings: AgentXSettings) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
@@ -43,14 +43,14 @@ function writeLocalSettings(settings: SolSettings) {
   }
 }
 
-export async function loadSettings(): Promise<SolSettings> {
+export async function loadSettings(): Promise<AgentXSettings> {
   try {
     const res = await fetch(`${API_BASE}/v1/settings`);
     if (!res.ok) {
       throw new Error("Failed to load backend settings");
     }
     const data = await res.json();
-    const normalized: SolSettings = { ...DEFAULT_SETTINGS, ...data };
+    const normalized: AgentXSettings = { ...DEFAULT_SETTINGS, ...data };
     writeLocalSettings(normalized);
     return normalized;
   } catch {
@@ -58,8 +58,8 @@ export async function loadSettings(): Promise<SolSettings> {
   }
 }
 
-export async function saveSettings(settings: SolSettings): Promise<void> {
-  const normalized: SolSettings = { ...DEFAULT_SETTINGS, ...settings };
+export async function saveSettings(settings: AgentXSettings): Promise<void> {
+  const normalized: AgentXSettings = { ...DEFAULT_SETTINGS, ...settings };
   writeLocalSettings(normalized);
   try {
     await fetch(`${API_BASE}/v1/settings`, {

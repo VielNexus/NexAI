@@ -8,13 +8,13 @@ python .\scripts\package_release.py
 
 The release archive:
 
-- defaults to `nexai-<version>.zip`
-- includes `install-sol.sh`, `SolVersion2`, `apps`, and built `SolWeb/dist`
-- requires `SolWeb/dist/index.html`
+- defaults to `agentx-<version>.zip`
+- includes `install-agentx.sh`, `AgentX`, `apps`, and built `AgentXWeb/dist`
+- requires `AgentXWeb/dist/index.html`
 - excludes local state such as `.git`, virtualenvs, caches, logs, data directories, editor junk, frontend source, and tests
 - writes:
-  - `dist/nexai-<version>.zip`
-  - `dist/nexai-<version>.zip.sha256`
+  - `dist/agentx-<version>.zip`
+  - `dist/agentx-<version>.zip.sha256`
   - `dist/release-manifest.json`
 
 The script validates:

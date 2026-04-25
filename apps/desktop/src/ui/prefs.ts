@@ -1,12 +1,12 @@
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, SolSettings } from "../config";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, AgentXSettings } from "../config";
 
 const inspectorListeners = new Set<(value: boolean) => void>();
-const themeListeners = new Set<(value: SolSettings["theme"]) => void>();
+const themeListeners = new Set<(value: AgentXSettings["theme"]) => void>();
 const inspectorWindowListeners = new Set<(value: boolean) => void>();
 const chatProviderListeners = new Set<(value: string) => void>();
 const chatModelListeners = new Set<(value: string) => void>();
 
-let currentSettings: SolSettings = DEFAULT_SETTINGS;
+let currentSettings: AgentXSettings = DEFAULT_SETTINGS;
 
 function emit() {
   for (const listener of inspectorListeners) {
@@ -31,7 +31,7 @@ loadSettings().then((loaded) => {
   emit();
 });
 
-function updateSettings(next: SolSettings) {
+function updateSettings(next: AgentXSettings) {
   currentSettings = next;
   emit();
   void saveSettings(next);
@@ -57,11 +57,11 @@ export function getTheme(): string {
   return currentSettings.theme;
 }
 
-export function setTheme(theme: SolSettings["theme"]) {
+export function setTheme(theme: AgentXSettings["theme"]) {
   updateSettings({ ...currentSettings, theme });
 }
 
-export function subscribeTheme(listener: (value: SolSettings["theme"]) => void) {
+export function subscribeTheme(listener: (value: AgentXSettings["theme"]) => void) {
   themeListeners.add(listener);
   listener(currentSettings.theme);
   return () => {

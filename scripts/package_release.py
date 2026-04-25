@@ -15,31 +15,31 @@ from typing import Any
 
 
 RELEASE_ROOT_FILES = (
-    "install-sol.sh",
+    "install-agentx.sh",
     "README.md",
     "LICENSE",
     "RELEASE.md",
 )
 
 RELEASE_ROOT_DIRS = (
-    "SolVersion2",
-    "SolWeb",
+    "AgentX",
+    "AgentXWeb",
     "apps",
 )
 
 REQUIRED_PATHS = (
-    "install-sol.sh",
-    "SolVersion2/sol",
+    "install-agentx.sh",
+    "AgentX/agentx",
     "apps/api",
-    "SolWeb",
-    "SolWeb/dist/index.html",
+    "AgentXWeb",
+    "AgentXWeb/dist/index.html",
 )
 
 REQUIRED_ARCHIVE_PATHS = (
-    "install-sol.sh",
-    "SolVersion2/sol/__init__.py",
-    "apps/api/sol_api/__init__.py",
-    "SolWeb/dist/index.html",
+    "install-agentx.sh",
+    "AgentX/agentx/__init__.py",
+    "apps/api/agentx_api/__init__.py",
+    "AgentXWeb/dist/index.html",
     "release-manifest.json",
 )
 
@@ -47,12 +47,12 @@ FORBIDDEN_ARCHIVE_PREFIXES = (
     ".git/",
     ".venv/",
     "node_modules/",
-    "SolVersion2/data/",
-    "SolVersion2/logs/",
-    "SolVersion2/tests/",
+    "AgentX/data/",
+    "AgentX/logs/",
+    "AgentX/tests/",
     "apps/api/tests/",
-    "apps/api/sol_api/data/",
-    "SolWeb/src/",
+    "apps/api/agentx_api/data/",
+    "AgentXWeb/src/",
 )
 
 FORBIDDEN_ARCHIVE_CONTAINS = (
@@ -84,17 +84,17 @@ EXCLUDED_SUFFIXES = {
 }
 
 EXCLUDED_EXACT_DIRS = {
-    "SolVersion2/.venv",
-    "SolVersion2/build",
-    "SolVersion2/data",
-    "SolVersion2/logs",
-    "SolVersion2/solversion2.egg-info",
-    "SolVersion2/tests",
+    "AgentX/.venv",
+    "AgentX/build",
+    "AgentX/data",
+    "AgentX/logs",
+    "AgentX/agentx.egg-info",
+    "AgentX/tests",
     "apps/desktop",
     "apps/api/.venv",
-    "apps/api/sol_api/data",
+    "apps/api/agentx_api/data",
     "apps/api/tests",
-    "SolWeb/src",
+    "AgentXWeb/src",
 }
 
 EXCLUDED_EXACT_FILES = {
@@ -128,7 +128,7 @@ def _normalize(path: Path) -> str:
 
 
 def discover_version(repo_root: Path) -> str:
-    version_path = repo_root / "SolVersion2" / "sol" / "version.py"
+    version_path = repo_root / "AgentX" / "agentx" / "version.py"
     if not version_path.exists():
         raise ReleasePackagingError(f"Missing version source: {version_path}")
     namespace: dict[str, Any] = {}
@@ -140,7 +140,7 @@ def discover_version(repo_root: Path) -> str:
 
 
 def _default_archive_name(version: str) -> str:
-    return f"nexai-{version}.zip"
+    return f"agentx-{version}.zip"
 
 
 def _relative_paths(repo_root: Path) -> list[Path]:
@@ -186,11 +186,11 @@ def should_exclude(rel_path: Path, *, is_dir: bool) -> bool:
     if any(token in f"{normalized}/" for token in EXCLUDED_CONTAINS):
         return True
     if is_dir and name in EXCLUDED_DIR_NAMES:
-        if normalized == "SolWeb/dist":
+        if normalized == "AgentXWeb/dist":
             return False
         return True
     if any(part in EXCLUDED_DIR_NAMES for part in rel_path.parts):
-        if normalized.startswith("SolWeb/dist/") or normalized == "SolWeb/dist":
+        if normalized.startswith("AgentXWeb/dist/") or normalized == "AgentXWeb/dist":
             return False
         return True
     if rel_path.suffix in EXCLUDED_SUFFIXES:
@@ -214,12 +214,12 @@ def collect_release_files(repo_root: Path) -> list[Path]:
 
 def _build_warnings(repo_root: Path) -> list[str]:
     warnings: list[str] = []
-    dist_index = repo_root / "SolWeb" / "dist" / "index.html"
-    src_root = repo_root / "SolWeb" / "src"
+    dist_index = repo_root / "AgentXWeb" / "dist" / "index.html"
+    src_root = repo_root / "AgentXWeb" / "src"
     if dist_index.exists() and src_root.exists():
         newest_src = max((path.stat().st_mtime for path in src_root.rglob("*") if path.is_file()), default=0.0)
         if newest_src and dist_index.stat().st_mtime < newest_src:
-            warnings.append("SolWeb/dist appears older than SolWeb/src. Rebuild the frontend before shipping if needed.")
+            warnings.append("AgentXWeb/dist appears older than AgentXWeb/src. Rebuild the frontend before shipping if needed.")
     return warnings
 
 
@@ -348,8 +348,8 @@ def package_release(repo_root: Path, output_dir: Path, *, archive_name: str | No
     output_dir = output_dir.resolve()
     version = discover_version(repo_root)
     resolved_archive_name = archive_name or _default_archive_name(version)
-    with tempfile.TemporaryDirectory(prefix="nexai-release-") as tmp_dir:
-        release_root = Path(tmp_dir) / "nexai-release"
+    with tempfile.TemporaryDirectory(prefix="agentx-release-") as tmp_dir:
+        release_root = Path(tmp_dir) / "agentx-release"
         release_root.mkdir(parents=True, exist_ok=True)
         manifest = build_release_tree(repo_root, release_root, version=version, archive_name=resolved_archive_name)
         _write_manifest(release_root / "release-manifest.json", manifest)
@@ -393,7 +393,7 @@ def _print_report(result: ReleaseBuildResult) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a clean deterministic NexAI release archive.")
+    parser = argparse.ArgumentParser(description="Build a clean deterministic AgentX release archive.")
     parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]), help="Repository root")
     parser.add_argument("--output-dir", default=str(Path(__file__).resolve().parents[1] / "dist"), help="Directory for the final archive")
     parser.add_argument("--archive-name", default=None, help="Output archive filename")

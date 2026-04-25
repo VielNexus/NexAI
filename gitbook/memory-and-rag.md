@@ -1,8 +1,8 @@
 # Memory And RAG
 
-NexAI has two related retrieval systems:
+AgentX has two related retrieval systems:
 
-- Runtime memory in `SolVersion2`.
+- Runtime memory in `AgentX`.
 - API-side RAG in `apps/api`.
 
 They both use SQLite-style local storage and chunking, but they are configured through different layers.
@@ -32,12 +32,12 @@ Runtime memory is used by the agent to:
 
 ## API RAG
 
-Configured by `SOL_RAG_*` variables.
+Configured by `AGENTX_RAG_*` variables.
 
 Default API RAG database:
 
 ```text
-SOL_API_DATA_DIR/rag.sqlite3
+AGENTX_API_DATA_DIR/rag.sqlite3
 ```
 
 Main endpoints:
@@ -65,7 +65,7 @@ curl -X POST http://127.0.0.1:8420/v1/rag/gather \
   -d '{"path":"/path/allowed/by/policy","max_files":100}'
 ```
 
-The target path must be under `SOL_RAG_ALLOWED_ROOTS`.
+The target path must be under `AGENTX_RAG_ALLOWED_ROOTS`.
 
 ## Query RAG
 
@@ -77,7 +77,7 @@ curl -X POST http://127.0.0.1:8420/v1/rag/query \
 
 ## Ingest Manifests
 
-The SolVersion2 bridge exposes ingest manifests:
+The AgentX bridge exposes ingest manifests:
 
 ```http
 GET /v1/memory/ingest/manifests
@@ -91,8 +91,8 @@ Manifests are used by web/repo/Tibia ingest flows to track pages visited, pages 
 CLI:
 
 ```bash
-nexai memory stats --reason "Inspect memory"
-nexai memory prune --older-than-days 60 --dry-run --reason "Review cleanup"
+agentx memory stats --reason "Inspect memory"
+agentx memory prune --older-than-days 60 --dry-run --reason "Review cleanup"
 ```
 
 API:

@@ -24,7 +24,7 @@ export async function openInspectorWindow() {
 
   new WebviewWindow(LABEL, {
     url: URL,
-    title: "Sol Inspector",
+    title: "AgentX Inspector",
     width: 420,
     height: 800,
     resizable: true,

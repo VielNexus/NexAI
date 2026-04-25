@@ -69,33 +69,33 @@ temp/
 /uploads/
 rars/
 tmp_cli_run_check/
-export SOL_BOOTSTRAP_APP_ROOT=*/
+export AGENTX_BOOTSTRAP_APP_ROOT=*/
 Changes/
 
-# Sol runtime state
-apps/api/sol_api/data/
-apps/api/sol_api/data/**
-apps/api/sol_api/data/threads/
-apps/api/sol_api/data/threads/**/*.json
+# AgentX runtime state
+apps/api/agentx_api/data/
+apps/api/agentx_api/data/**
+apps/api/agentx_api/data/threads/
+apps/api/agentx_api/data/threads/**/*.json
 apps/api/.venv/
-SolVersion2/data/
-SolVersion2/data/**
-SolVersion2/logs/
-SolVersion2/logs/**
+AgentX/data/
+AgentX/data/**
+AgentX/logs/
+AgentX/logs/**
 **/logs/
-SolVersion2/build/
-SolVersion2/Server/data/features/autonomy_platform/logs/
-SolVersion2/solversion2.egg-info/
-SolVersion2/.pytest_cache/
+AgentX/build/
+AgentX/Server/data/features/autonomy_platform/logs/
+AgentX/agentx.egg-info/
+AgentX/.pytest_cache/
 **/.pytest_cache/
 **/.venv/
-SolVersion2/**/__pycache__/
+AgentX/**/__pycache__/
 **/__pycache__/
-SolVersion2/**/unsafe.log
+AgentX/**/unsafe.log
 apps/desktop/dist/
 apps/desktop/node_modules/
-SolWeb/dist/
-SolWeb/node_modules/
+AgentXWeb/dist/
+AgentXWeb/node_modules/
 
 # Local config and secrets
 .env
@@ -112,6 +112,7 @@ settings.json
 install.json
 unsafe.log
 *.log
+agentx_audit.jsonl
 sol_audit.jsonl
 memory_events.jsonl
 rag.sqlite3
@@ -125,7 +126,7 @@ rag.sqlite3
 
 # Local notes / generated workspace artifacts
 ProCon.md
-Sol-Log.md
+AgentX-Log.md
 *.db
 *.sqlite
 *.sqlite3

@@ -7,23 +7,23 @@ from pathlib import Path, PurePosixPath
 
 from fastapi.testclient import TestClient
 
-from sol_api.app import create_app
-from sol_api.auth import session_store
-from sol_api.config import config
-from sol_api.rag.session import session_tracker
-import sol_api.routes.settings as settings_route
-from sol_api.routes.settings import SettingsModel
-from sol.config import load_config
-from sol.core.agent import Agent
-from sol.core.audit import AuditLog
-from sol.core.context import SolContext
-from sol.core.journal import Journal
-from sol.core.unsafe_mode import disable as disable_unsafe
-from sol.core.unsafe_mode import enable as enable_unsafe
-from sol.core.working_memory import WorkingMemoryManager
-from sol.runtime.paths import build_runtime_paths, ensure_runtime_dirs
-from sol.tools.fs import FsDeleteTool, FsGrepTool, FsListTool, FsReadTool, FsWriteTool
-from sol.tools.registry import ToolRegistry
+from agentx_api.app import create_app
+from agentx_api.auth import session_store
+from agentx_api.config import config
+from agentx_api.rag.session import session_tracker
+import agentx_api.routes.settings as settings_route
+from agentx_api.routes.settings import SettingsModel
+from agentx.config import load_config
+from agentx.core.agent import Agent
+from agentx.core.audit import AuditLog
+from agentx.core.context import AgentXContext
+from agentx.core.journal import Journal
+from agentx.core.unsafe_mode import disable as disable_unsafe
+from agentx.core.unsafe_mode import enable as enable_unsafe
+from agentx.core.working_memory import WorkingMemoryManager
+from agentx.runtime.paths import build_runtime_paths, ensure_runtime_dirs
+from agentx.tools.fs import FsDeleteTool, FsGrepTool, FsListTool, FsReadTool, FsWriteTool
+from agentx.tools.registry import ToolRegistry
 from conftest import write_test_config
 
 
@@ -35,11 +35,11 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
 
 def _build_live_agent(tmp_path: Path) -> tuple[Agent, Path]:
     write_test_config(tmp_path)
-    cfg = load_config(str(tmp_path / "config" / "sol.toml"))
+    cfg = load_config(str(tmp_path / "config" / "agentx.toml"))
     runtime_paths = build_runtime_paths(cfg)
     ensure_runtime_dirs(runtime_paths)
     wm = WorkingMemoryManager()
-    ctx = SolContext(
+    ctx = AgentXContext(
         cfg=cfg,
         journal=Journal(cfg),
         audit=AuditLog(cfg.audit.log_path),
@@ -78,7 +78,7 @@ def _build_live_agent(tmp_path: Path) -> tuple[Agent, Path]:
 
 def _build_live_agent_factory(tmp_path: Path):
     write_test_config(tmp_path)
-    cfg = load_config(str(tmp_path / "config" / "sol.toml"))
+    cfg = load_config(str(tmp_path / "config" / "agentx.toml"))
     runtime_paths = build_runtime_paths(cfg)
     ensure_runtime_dirs(runtime_paths)
     wm = WorkingMemoryManager()
@@ -95,7 +95,7 @@ def _build_live_agent_factory(tmp_path: Path):
     posix_root.mkdir(parents=True, exist_ok=True)
 
     def _make_agent() -> Agent:
-        ctx = SolContext(
+        ctx = AgentXContext(
             cfg=cfg,
             journal=Journal(cfg),
             audit=AuditLog(cfg.audit.log_path),
@@ -124,7 +124,7 @@ def _build_live_agent_factory(tmp_path: Path):
     return _make_agent, work_dir, wm
 
 
-def test_chat_prefers_solv2_runtime_path(monkeypatch, tmp_path) -> None:
+def test_chat_prefers_agentx_runtime_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(config, "settings_path", tmp_path / "settings.json")
     threads_dir = tmp_path / "threads"
     threads_dir.mkdir(parents=True, exist_ok=True)
@@ -151,8 +151,8 @@ def test_chat_prefers_solv2_runtime_path(monkeypatch, tmp_path) -> None:
             captured.update(kwargs)
             return SimpleNamespace(text="ok", retrieved=tuple(), sources=tuple(), verification_level=None, verification=None, tool_results=tuple())
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
 
     client = TestClient(create_app())
     headers = _auth_headers(client)
@@ -192,7 +192,7 @@ def test_runtime_state_exposes_working_memory_snapshot(monkeypatch, tmp_path) ->
                 },
             }
 
-    monkeypatch.setattr("sol_api.routes.solv2.get_agent_for_thread", lambda thread_id, user=None: (_FakeHandle(), _FakeAgent()))
+    monkeypatch.setattr("agentx_api.routes.agentx.get_agent_for_thread", lambda thread_id, user=None: (_FakeHandle(), _FakeAgent()))
 
     client = TestClient(create_app())
     headers = _auth_headers(client)
@@ -224,16 +224,16 @@ def test_chat_live_route_honors_requested_paths_and_avoids_helper_words(monkeypa
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
 
     cases = [
         ("create a file named demo.txt with content hello", work_dir / "demo.txt", "hello"),
         ('create a new file called pythoncode.py with content print("hello")', work_dir / "pythoncode.py", 'print("hello")'),
-        ("create a file at /home/nexus/demo.txt with content hello", work_dir / "_posix_root" / "home" / "nexus" / "demo.txt", "hello"),
-        ("create /home/nexus/demo2.txt with content hello", work_dir / "_posix_root" / "home" / "nexus" / "demo2.txt", "hello"),
+        ("create a file at /home/agentx/demo.txt with content hello", work_dir / "_posix_root" / "home" / "agentx" / "demo.txt", "hello"),
+        ("create /home/agentx/demo2.txt with content hello", work_dir / "_posix_root" / "home" / "agentx" / "demo2.txt", "hello"),
     ]
 
     for prompt, expected_path, expected_content in cases:
@@ -281,8 +281,8 @@ def test_chat_live_route_request_unsafe_enabled_allows_overwrite(monkeypatch, tm
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -323,8 +323,8 @@ def test_chat_live_route_request_unsafe_disabled_blocks_overwrite(monkeypatch, t
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -363,8 +363,8 @@ def test_chat_live_route_canvas_artifact_with_filename_writes_file(monkeypatch, 
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -411,8 +411,8 @@ def test_chat_live_route_canvas_artifact_without_filename_clarifies(monkeypatch,
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -454,8 +454,8 @@ def test_chat_live_route_write_quoted_text_into_file(monkeypatch, tmp_path) -> N
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": 'write "hello world" into demo.txt', "thread_id": None})
@@ -486,8 +486,8 @@ def test_chat_live_route_write_without_content_clarifies(monkeypatch, tmp_path) 
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "write into demo.txt", "thread_id": None})
@@ -518,8 +518,8 @@ def test_chat_live_route_artifact_content_overrides_inline_text(monkeypatch, tmp
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -564,8 +564,8 @@ def test_chat_live_route_pending_file_write_resumes_on_next_turn(monkeypatch, tm
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "Write into demos.txt", "thread_id": None})
@@ -601,8 +601,8 @@ def test_chat_live_route_pending_file_write_cancel_clears(monkeypatch, tmp_path)
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "Write into demos.txt", "thread_id": None})
@@ -637,8 +637,8 @@ def test_chat_live_route_unrelated_follow_up_discards_pending_action(monkeypatch
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "Write into demos.txt", "thread_id": None})
@@ -673,8 +673,8 @@ def test_chat_live_route_pending_python_file_guides_then_executes(monkeypatch, t
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "create a python file", "thread_id": None})
@@ -716,8 +716,8 @@ def test_chat_live_route_write_to_notes_clarifies_filename(monkeypatch, tmp_path
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "write to notes", "thread_id": None})
@@ -748,8 +748,8 @@ def test_chat_live_route_write_meeting_notes_stays_discuss(monkeypatch, tmp_path
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "write meeting notes", "thread_id": None})
@@ -780,8 +780,8 @@ def test_chat_live_route_write_to_notes_txt_asks_for_content(monkeypatch, tmp_pa
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "write to notes.txt", "thread_id": None})
@@ -812,8 +812,8 @@ def test_chat_live_route_pending_content_help_does_not_write(monkeypatch, tmp_pa
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "write to notes.txt", "thread_id": None})
@@ -849,8 +849,8 @@ def test_chat_live_route_pending_content_example_does_not_write(monkeypatch, tmp
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "write to notes.txt", "thread_id": None})
@@ -886,8 +886,8 @@ def test_chat_live_route_pending_content_literal_reply_writes(monkeypatch, tmp_p
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "write to notes.txt", "thread_id": None})
@@ -922,8 +922,8 @@ def test_chat_live_route_pending_content_cancel_clears(monkeypatch, tmp_path) ->
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), make_agent()))
 
     client = TestClient(create_app())
     first = client.post("/v1/chat", json={"message": "write to notes.txt", "thread_id": None})
@@ -965,8 +965,8 @@ def test_chat_live_route_explain_this_code_uses_artifact_context(monkeypatch, tm
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post(
@@ -1011,8 +1011,8 @@ def test_chat_live_route_explain_this_code_without_artifact_clarifies(monkeypatc
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "explain this code", "thread_id": None})
@@ -1042,8 +1042,8 @@ def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatc
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
 
@@ -1051,7 +1051,7 @@ def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatc
     assert created.status_code == 200, created.text
     assert (work_dir / "demo.txt").exists()
 
-    posix_created = client.post("/v1/chat", json={"message": "create a file at /home/nexus/demo.txt with content hello", "thread_id": None})
+    posix_created = client.post("/v1/chat", json={"message": "create a file at /home/agentx/demo.txt with content hello", "thread_id": None})
     assert posix_created.status_code == 200, posix_created.text
 
     read_prompts = [
@@ -1071,7 +1071,7 @@ def test_chat_live_route_reads_files_via_tools_and_supports_followups(monkeypatc
         assert "fs.read_text: OK" in payload["content"]
         assert "hello" in payload["content"]
 
-    posix_read = client.post("/v1/chat", json={"message": "open /home/nexus/demo.txt", "thread_id": None})
+    posix_read = client.post("/v1/chat", json={"message": "open /home/agentx/demo.txt", "thread_id": None})
     assert posix_read.status_code == 200, posix_read.text
     assert "fs.read_text: OK" in posix_read.json()["content"]
     assert "hello" in posix_read.json()["content"]
@@ -1107,8 +1107,8 @@ def test_chat_live_route_delete_uses_fs_delete_when_allowed(monkeypatch, tmp_pat
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     created = client.post("/v1/chat", json={"message": "create a file named demo.txt with content hello", "thread_id": None})
@@ -1156,8 +1156,8 @@ def test_chat_live_route_clarifies_when_read_target_is_unknown_and_does_not_hall
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "show the file I just created", "thread_id": None})
@@ -1166,7 +1166,7 @@ def test_chat_live_route_clarifies_when_read_target_is_unknown_and_does_not_hall
     assert "fs.read_text: OK" not in payload["content"]
     assert ("could not be determined" in payload["content"].lower()) or ("missing required arguments" in payload["content"].lower())
     assert "hello" not in payload["content"].lower()
-    assert "Sol says:" not in payload["content"]
+    assert "AgentX says:" not in payload["content"]
 
 
 def test_chat_live_route_missing_file_read_returns_grounded_not_found(monkeypatch, tmp_path) -> None:
@@ -1190,8 +1190,8 @@ def test_chat_live_route_missing_file_read_returns_grounded_not_found(monkeypatc
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "read missing.txt", "thread_id": None})
@@ -1199,7 +1199,7 @@ def test_chat_live_route_missing_file_read_returns_grounded_not_found(monkeypatc
     payload = response.json()
     assert "fs.read_text: FAILED" in payload["content"]
     assert "File not found." in payload["content"]
-    assert "Sol says:" not in payload["content"]
+    assert "AgentX says:" not in payload["content"]
 
 
 def test_chat_live_route_repo_inspection_reads_ranked_files_and_explains(monkeypatch, tmp_path) -> None:
@@ -1236,8 +1236,8 @@ def test_chat_live_route_repo_inspection_reads_ranked_files_and_explains(monkeyp
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     response = client.post("/v1/chat", json={"message": "where is delete implemented and how does it work", "thread_id": None})
@@ -1250,7 +1250,7 @@ def test_chat_live_route_repo_inspection_reads_ranked_files_and_explains(monkeyp
     assert "Grounded repo analysis:" in payload["content"]
     assert 'DELETE_TOOL = "fs.delete"' in payload["content"]
     assert "def perform_delete(target: str)" in payload["content"]
-    assert "Sol says:" not in payload["content"]
+    assert "AgentX says:" not in payload["content"]
 
 
 def test_chat_live_route_design_request_does_not_trigger_filesystem_tools(monkeypatch, tmp_path) -> None:
@@ -1274,8 +1274,8 @@ def test_chat_live_route_design_request_does_not_trigger_filesystem_tools(monkey
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
     prompt = "I need you to design a tool that will allow you to read the contents of files located on the system"
@@ -1286,7 +1286,7 @@ def test_chat_live_route_design_request_does_not_trigger_filesystem_tools(monkey
     assert "fs.read_text" not in payload["content"]
     assert "fs.write_text" not in payload["content"]
     assert "Could not determine a path to list" not in payload["content"]
-    assert "Sol says:" in payload["content"]
+    assert "AgentX says:" in payload["content"]
     assert not (work_dir / "named").exists()
     assert not (work_dir / "at").exists()
     assert sorted(item.name for item in work_dir.iterdir()) == ["_posix_root"]
@@ -1304,7 +1304,7 @@ def test_chat_live_route_list_files_still_triggers_filesystem_tool(monkeypatch, 
     session_tracker.reset_for_tests()
 
     agent, work_dir = _build_live_agent(tmp_path)
-    target_dir = work_dir / "_posix_root" / "home" / "nexus"
+    target_dir = work_dir / "_posix_root" / "home" / "agentx"
     target_dir.mkdir(parents=True, exist_ok=True)
     (target_dir / "alpha.txt").write_text("alpha", encoding="utf-8")
 
@@ -1316,11 +1316,11 @@ def test_chat_live_route_list_files_still_triggers_filesystem_tool(monkeypatch, 
         class ctx:
             audit = _FakeAudit()
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="stub", chatModel="stub"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), agent))
 
     client = TestClient(create_app())
-    response = client.post("/v1/chat", json={"message": "list files in /home/nexus", "thread_id": None})
+    response = client.post("/v1/chat", json={"message": "list files in /home/agentx", "thread_id": None})
     assert response.status_code == 200, response.text
     payload = response.json()
     assert "fs.list: OK" in payload["content"]

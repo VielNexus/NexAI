@@ -2,7 +2,7 @@
 
 ## Built-In Tool Registry
 
-Tools are registered by `SolVersion2/sol/tools/registry.py`.
+Tools are registered by `AgentX/agentx/tools/registry.py`.
 
 Built-in tool groups include:
 
@@ -42,7 +42,7 @@ Tool execution requires:
 CLI example:
 
 ```bash
-nexai tool fs.list --reason "Inspect repo root" --json "{\"path\":\"F:/Sol Folder\"}"
+agentx tool fs.list --reason "Inspect repo root" --json "{\"path\":\"F:/AgentX Folder\"}"
 ```
 
 API example:
@@ -54,7 +54,7 @@ POST /v1/tool
 ```json
 {
   "tool": "fs.list",
-  "args": { "path": "F:/Sol Folder" },
+  "args": { "path": "F:/AgentX Folder" },
   "reason": "Inspect repo root",
   "thread_id": "optional"
 }
@@ -101,9 +101,9 @@ The entrypoint must return a `Tool` or iterable of `Tool` objects, and the actua
 Manage plugins:
 
 ```bash
-nexai plugins list
-nexai plugins enable echo_demo
-nexai plugins disable echo_demo
+agentx plugins list
+agentx plugins enable echo_demo
+agentx plugins disable echo_demo
 ```
 
 Plugin enable/disable state is stored in runtime plugin state.
@@ -120,7 +120,7 @@ Skill discovery reads:
 Skill import:
 
 ```bash
-nexai skills import-pack ./skills/repo_triage
+agentx skills import-pack ./skills/repo_triage
 ```
 
 Skill packs can include YAML-like frontmatter in `SKILL.md`, plus optional `metadata.json`.
@@ -158,15 +158,15 @@ Job features:
 Create and run:
 
 ```bash
-nexai job create --goal "Inspect project health" --max-steps 10 --max-failures 3
-nexai job run <job_id>
+agentx job create --goal "Inspect project health" --max-steps 10 --max-failures 3
+agentx job run <job_id>
 ```
 
 If a plan includes destructive tools or high/critical-risk plugin tools, the job can become blocked with a pending approval:
 
 ```bash
-nexai job approve <job_id>
-nexai job approve <job_id> --deny --note "Too risky"
+agentx job approve <job_id>
+agentx job approve <job_id> --deny --note "Too risky"
 ```
 
 Job terminal states include completed, failed, blocked, and cancelled.

@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from sol_api.app import create_app
-from sol_api.auth import session_store
-from sol_api.config import config
-from sol_api.rag.session import session_tracker
-import sol_api.routes.settings as settings_route
-from sol_api.routes.settings import SettingsModel
+from agentx_api.app import create_app
+from agentx_api.auth import session_store
+from agentx_api.config import config
+from agentx_api.rag.session import session_tracker
+import agentx_api.routes.settings as settings_route
+from agentx_api.routes.settings import SettingsModel
 
 
 def _sha256(value: str) -> str:
@@ -65,9 +65,9 @@ def test_protected_routes_require_authentication(client: TestClient) -> None:
         ("post", "/v1/chat"),
     ):
         if method == "get":
-            res = client.get(path, headers={"X-Sol-User": "alice"})
+            res = client.get(path, headers={"X-AgentX-User": "alice"})
         else:
-            res = client.post(path, json={"message": "hi"}, headers={"X-Sol-User": "alice"})
+            res = client.post(path, json={"message": "hi"}, headers={"X-AgentX-User": "alice"})
         assert res.status_code == 401
 
 
@@ -75,7 +75,7 @@ def test_spoofed_identity_header_does_not_override_authenticated_user(client: Te
     alice_headers = _auth_headers(client, "alice", "alice-pass")
     bob_headers = _auth_headers(client, "bob", "bob-pass")
 
-    res = client.post("/v1/threads", json={"title": "Alice thread"}, headers={**alice_headers, "X-Sol-User": "bob"})
+    res = client.post("/v1/threads", json={"title": "Alice thread"}, headers={**alice_headers, "X-AgentX-User": "bob"})
     assert res.status_code == 200, res.text
     thread_id = res.json()["id"]
 
@@ -136,8 +136,8 @@ def test_active_thread_tracking_isolated_per_authenticated_user(client: TestClie
                 tool_results=tuple(),
             )
 
-    monkeypatch.setattr("sol_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2"))
-    monkeypatch.setattr("sol_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
+    monkeypatch.setattr("agentx_api.routes.chat._read_settings", lambda: SettingsModel(chatProvider="ollama", chatModel="llama3.2"))
+    monkeypatch.setattr("agentx_api.routes.chat._get_agent_pair", lambda thread_id, user="unknown": (_FakeHandle(), _FakeAgent()))
 
     bob_chat = client.post("/v1/chat", json={"message": "hi"}, headers=bob_headers)
     alice_chat = client.post("/v1/chat", json={"message": "hi"}, headers=alice_headers)
@@ -148,7 +148,7 @@ def test_active_thread_tracking_isolated_per_authenticated_user(client: TestClie
 
 
 def test_unsafe_mode_uses_authenticated_user_not_spoofed_header(client: TestClient, monkeypatch) -> None:
-    import sol.core.unsafe_mode as unsafe_mode
+    import agentx.core.unsafe_mode as unsafe_mode
 
     alice_headers = _auth_headers(client, "alice", "alice-pass")
     created = client.post("/v1/threads", json={"title": "Unsafe thread"}, headers=alice_headers)
@@ -160,13 +160,13 @@ def test_unsafe_mode_uses_authenticated_user_not_spoofed_header(client: TestClie
         captured["user"] = user
         return SimpleNamespace(thread_id=thread_id, unsafe_enabled=True, enabled_at="now", enabled_by=user, reason=reason)
 
-    monkeypatch.setattr("sol_api.routes.unsafe.get_handle", lambda: SimpleNamespace(cfg=object()))
+    monkeypatch.setattr("agentx_api.routes.unsafe.get_handle", lambda: SimpleNamespace(cfg=object()))
     monkeypatch.setattr(unsafe_mode, "enable", _fake_enable)
 
     response = client.post(
         f"/v1/agent/unsafe/{thread_id}/enable",
         json={"reason": "needed"},
-        headers={**alice_headers, "X-Sol-User": "bob"},
+        headers={**alice_headers, "X-AgentX-User": "bob"},
     )
 
     assert response.status_code == 200, response.text

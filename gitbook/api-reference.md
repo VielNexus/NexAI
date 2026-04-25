@@ -1,6 +1,6 @@
 # API Reference
 
-The backend is a FastAPI application created by `apps/api/sol_api/app.py`.
+The backend is a FastAPI application created by `apps/api/agentx_api/app.py`.
 
 Default base URL:
 
@@ -47,7 +47,7 @@ Login body:
 
 ```json
 {
-  "username": "nexus",
+  "username": "agentx",
   "password": "password"
 }
 ```
@@ -109,7 +109,7 @@ Threads are owner-isolated by hashing the authenticated user ID into a per-user 
 | `POST` | `/v1/rag/gather` | Gather text files under an allowed root |
 | `POST` | `/v1/rag/query` | Query indexed chunks |
 
-`/v1/rag/gather` only accepts paths under `SOL_RAG_ALLOWED_ROOTS`, defaulting to the API data directory.
+`/v1/rag/gather` only accepts paths under `AGENTX_RAG_ALLOWED_ROOTS`, defaulting to the API data directory.
 
 ## Filesystem
 
@@ -126,7 +126,7 @@ Threads are owner-isolated by hashing the authenticated user ID into a per-user 
 
 Filesystem access is disabled by default at the API layer.
 
-## SolVersion2 Bridge
+## AgentX Bridge
 
 | Method | Path | Purpose |
 | --- | --- | --- |

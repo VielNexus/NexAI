@@ -23,7 +23,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     this.setState({ error, info });
-    console.error("Sol UI ErrorBoundary caught:", error, info);
+    console.error("AgentX UI ErrorBoundary caught:", error, info);
   }
 
   render() {
@@ -35,7 +35,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       <div className="h-full w-full bg-slate-50">
         <div className="min-h-screen min-w-0 p-4">
           <Panel className="p-4">
-            <div className="text-lg font-semibold text-rose-600">Sol UI Error</div>
+            <div className="text-lg font-semibold text-rose-600">AgentX UI Error</div>
             <ScrollArea className="max-h-[60vh]">
               <div className="mt-3 space-y-2 text-sm">
                 <div className="font-medium">Message:</div>
