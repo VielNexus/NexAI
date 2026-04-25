@@ -4,6 +4,7 @@ import type { Message } from "../../api/client";
 import { MessageActions } from "./MessageActions";
 import { MessageBubble } from "./MessageBubble";
 import { MessageContent } from "./MessageContent";
+import { languageAccentClass } from "../codeCanvas";
 
 type Props = {
   message: Message;
@@ -113,7 +114,7 @@ export function ChatMessage({
           ) : null}
 
           {codeCanvasMeta ? (
-            <div className="agentx-message-canvas-note">
+            <div className={["agentx-message-canvas-note", languageAccentClass(codeCanvasMeta.language)].join(" ")}>
               <div className="agentx-message-canvas-note__meta">
                 <span className="agentx-message-canvas-note__title">{codeCanvasMeta.title}</span>
                 <span className="agentx-message-canvas-note__details">

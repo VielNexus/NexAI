@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { defaultCodeCanvasState, deserializeCodeCanvasState, saveCodeCanvasState, serializeCodeCanvasState } from "./codeCanvas";
+import { defaultCodeCanvasState, deserializeCodeCanvasState, languageAccentClass, languageLabel, normalizeCodeCanvasLanguage, saveCodeCanvasState, serializeCodeCanvasState } from "./codeCanvas";
 import { config } from "../config";
 
 describe("codeCanvas storage", () => {
@@ -39,6 +39,17 @@ describe("codeCanvas storage", () => {
     });
     expect(serialized).not.toBeNull();
     expect((serialized ?? "").length).toBeLessThanOrEqual(200_000);
+  });
+
+
+  it("normalizes common script languages for accent styling", () => {
+    expect(normalizeCodeCanvasLanguage("py")).toBe("python");
+    expect(normalizeCodeCanvasLanguage("ruby")).toBe("ruby");
+    expect(normalizeCodeCanvasLanguage("cpp")).toBe("cpp");
+    expect(normalizeCodeCanvasLanguage("c++")).toBe("cpp");
+    expect(normalizeCodeCanvasLanguage("sql")).toBe("sql");
+    expect(languageLabel("cpp")).toBe("C++");
+    expect(languageAccentClass("ruby")).toBe("agentx-code-canvas--ruby");
   });
 
   it("fails safely when browser storage rejects the write", () => {

@@ -335,29 +335,47 @@ button {
   display: none;
 }
 
+
 .agentx-code-canvas {
+  --agentx-code-canvas-accent: rgba(34, 211, 238, 0.32);
+  --agentx-code-canvas-accent-strong: rgba(34, 211, 238, 0.58);
+  --agentx-code-canvas-accent-soft: rgba(34, 211, 238, 0.1);
   position: relative;
   min-width: 0;
   border-radius: 1.35rem;
-  border: 1px solid rgba(51, 65, 85, 0.88);
+  border: 1px solid color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 62%, rgba(51, 65, 85, 0.88));
   background:
-    linear-gradient(180deg, rgba(7, 14, 26, 0.98), rgba(4, 10, 20, 0.96)),
-    radial-gradient(circle at top, rgba(34, 211, 238, 0.04), transparent 34%);
+    radial-gradient(circle at top left, var(--agentx-code-canvas-accent-soft), transparent 32%),
+    linear-gradient(180deg, rgba(7, 14, 26, 0.98), rgba(4, 10, 20, 0.96));
   box-shadow:
     inset 0 1px 0 rgba(148, 163, 184, 0.04),
+    0 0 0 1px color-mix(in srgb, var(--agentx-code-canvas-accent) 18%, transparent),
+    0 0 34px color-mix(in srgb, var(--agentx-code-canvas-accent) 28%, transparent),
     0 18px 36px rgba(2, 8, 23, 0.24);
   overflow: hidden;
 }
 
-.agentx-code-canvas::before {
+.agentx-code-canvas::before,
+.agentx-message-canvas-note::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   border: 1px solid var(--agentx-code-canvas-accent, rgba(34, 211, 238, 0.18));
+  opacity: 0.42;
+  pointer-events: none;
+  animation: agentx-code-canvas-pulse 3.2s ease-in-out infinite;
+}
+
+.agentx-code-canvas::after,
+.agentx-message-canvas-note::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background: radial-gradient(circle, var(--agentx-code-canvas-accent-soft), transparent 45%);
   opacity: 0.45;
   pointer-events: none;
-  animation: agentx-code-canvas-pulse 2.6s ease-in-out infinite;
+  transform: translate3d(-18%, -10%, 0);
 }
 
 .agentx-code-canvas--docked {
@@ -376,48 +394,93 @@ button {
 }
 
 .agentx-code-canvas--typescript {
-  --agentx-code-canvas-accent: rgba(96, 165, 250, 0.34);
+  --agentx-code-canvas-accent: rgba(96, 165, 250, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(96, 165, 250, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(96, 165, 250, 0.13);
 }
 
 .agentx-code-canvas--javascript {
-  --agentx-code-canvas-accent: rgba(250, 204, 21, 0.32);
+  --agentx-code-canvas-accent: rgba(250, 204, 21, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(250, 204, 21, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(250, 204, 21, 0.12);
 }
 
 .agentx-code-canvas--python {
-  --agentx-code-canvas-accent: rgba(245, 158, 11, 0.32);
+  --agentx-code-canvas-accent: rgba(74, 222, 128, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(74, 222, 128, 0.76);
+  --agentx-code-canvas-accent-soft: rgba(74, 222, 128, 0.13);
 }
 
-.agentx-code-canvas--html {
-  --agentx-code-canvas-accent: rgba(249, 115, 22, 0.32);
+.agentx-code-canvas--ruby {
+  --agentx-code-canvas-accent: rgba(248, 113, 113, 0.44);
+  --agentx-code-canvas-accent-strong: rgba(248, 113, 113, 0.78);
+  --agentx-code-canvas-accent-soft: rgba(248, 113, 113, 0.13);
 }
 
-.agentx-code-canvas--css {
-  --agentx-code-canvas-accent: rgba(34, 211, 238, 0.32);
-}
-
-.agentx-code-canvas--json {
-  --agentx-code-canvas-accent: rgba(167, 139, 250, 0.32);
-}
-
-.agentx-code-canvas--shell {
-  --agentx-code-canvas-accent: rgba(74, 222, 128, 0.3);
+.agentx-code-canvas--cpp,
+.agentx-code-canvas--c {
+  --agentx-code-canvas-accent: rgba(192, 132, 252, 0.44);
+  --agentx-code-canvas-accent-strong: rgba(192, 132, 252, 0.78);
+  --agentx-code-canvas-accent-soft: rgba(192, 132, 252, 0.14);
 }
 
 .agentx-code-canvas--csharp {
-  --agentx-code-canvas-accent: rgba(192, 132, 252, 0.32);
+  --agentx-code-canvas-accent: rgba(217, 70, 239, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(217, 70, 239, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(217, 70, 239, 0.12);
 }
 
+.agentx-code-canvas--java,
+.agentx-code-canvas--php {
+  --agentx-code-canvas-accent: rgba(251, 146, 60, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(251, 146, 60, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(251, 146, 60, 0.12);
+}
+
+.agentx-code-canvas--go,
+.agentx-code-canvas--sql,
+.agentx-code-canvas--css {
+  --agentx-code-canvas-accent: rgba(34, 211, 238, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(34, 211, 238, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(34, 211, 238, 0.12);
+}
+
+.agentx-code-canvas--html,
 .agentx-code-canvas--rust {
-  --agentx-code-canvas-accent: rgba(251, 146, 60, 0.32);
+  --agentx-code-canvas-accent: rgba(249, 115, 22, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(249, 115, 22, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(249, 115, 22, 0.12);
+}
+
+.agentx-code-canvas--json,
+.agentx-code-canvas--yaml {
+  --agentx-code-canvas-accent: rgba(251, 191, 36, 0.42);
+  --agentx-code-canvas-accent-strong: rgba(251, 191, 36, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(251, 191, 36, 0.12);
+}
+
+.agentx-code-canvas--shell {
+  --agentx-code-canvas-accent: rgba(132, 204, 22, 0.4);
+  --agentx-code-canvas-accent-strong: rgba(132, 204, 22, 0.72);
+  --agentx-code-canvas-accent-soft: rgba(132, 204, 22, 0.12);
+}
+
+.agentx-code-canvas--markdown,
+.agentx-code-canvas--text {
+  --agentx-code-canvas-accent: rgba(148, 163, 184, 0.34);
+  --agentx-code-canvas-accent-strong: rgba(148, 163, 184, 0.6);
+  --agentx-code-canvas-accent-soft: rgba(148, 163, 184, 0.08);
 }
 
 .agentx-code-canvas__header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.85rem;
   padding: 1rem 1rem 0.85rem;
-  border-bottom: 1px solid rgba(51, 65, 85, 0.72);
+  border-bottom: 1px solid color-mix(in srgb, var(--agentx-code-canvas-accent) 28%, rgba(51, 65, 85, 0.72));
   background: rgba(9, 16, 28, 0.84);
 }
 
@@ -429,7 +492,7 @@ button {
 }
 
 .agentx-code-canvas__eyebrow {
-  color: rgba(186, 230, 253, 0.62);
+  color: color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 64%, rgba(186, 230, 253, 0.62));
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -445,9 +508,10 @@ button {
 
 .agentx-code-canvas__language {
   border-radius: 9999px;
-  border: 1px solid rgba(51, 65, 85, 0.88);
-  background: rgba(15, 23, 42, 0.8);
-  color: rgba(226, 232, 240, 0.88);
+  border: 1px solid var(--agentx-code-canvas-accent);
+  background: color-mix(in srgb, var(--agentx-code-canvas-accent-soft) 78%, rgba(15, 23, 42, 0.8));
+  color: color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 72%, #f8fafc);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--agentx-code-canvas-accent) 32%, transparent);
   padding: 0.34rem 0.68rem;
   font-size: 0.7rem;
   font-weight: 700;
@@ -463,18 +527,22 @@ button {
 }
 
 .agentx-code-canvas__meta {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  color: rgba(148, 163, 184, 0.76);
+  color: color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 38%, rgba(148, 163, 184, 0.76));
   font-size: 0.74rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .agentx-code-canvas__editor-wrap {
+  position: relative;
+  z-index: 1;
   min-height: 0;
   flex: 1 1 auto;
   padding: 0 0.1rem 0.1rem;
@@ -494,10 +562,14 @@ button {
 }
 
 .agentx-code-canvas__editor:focus-visible {
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.3);
+  box-shadow: inset 0 0 0 1px var(--agentx-code-canvas-accent);
 }
 
 .agentx-message-canvas-note {
+  --agentx-code-canvas-accent: rgba(34, 211, 238, 0.32);
+  --agentx-code-canvas-accent-strong: rgba(34, 211, 238, 0.58);
+  --agentx-code-canvas-accent-soft: rgba(34, 211, 238, 0.1);
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -505,30 +577,52 @@ button {
   padding: 0.7rem 0.85rem;
   margin-bottom: 0.8rem;
   border-radius: 0.95rem;
-  border: 1px solid rgba(51, 65, 85, 0.76);
-  background: rgba(8, 15, 27, 0.56);
+  border: 1px solid color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 58%, rgba(51, 65, 85, 0.76));
+  background:
+    radial-gradient(circle at top left, var(--agentx-code-canvas-accent-soft), transparent 36%),
+    rgba(8, 15, 27, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(148, 163, 184, 0.04),
+    0 0 24px color-mix(in srgb, var(--agentx-code-canvas-accent) 26%, transparent);
+  overflow: hidden;
 }
 
 .agentx-message-canvas-note__meta {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 0.22rem;
 }
 
 .agentx-message-canvas-note__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   color: #f8fafc;
   font-size: 0.83rem;
   font-weight: 600;
 }
 
+.agentx-message-canvas-note__title::before {
+  content: "";
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 9999px;
+  background: var(--agentx-code-canvas-accent-strong);
+  box-shadow: 0 0 12px var(--agentx-code-canvas-accent-strong);
+}
+
 .agentx-message-canvas-note__details {
-  color: rgba(148, 163, 184, 0.78);
+  color: color-mix(in srgb, var(--agentx-code-canvas-accent-strong) 48%, rgba(148, 163, 184, 0.78));
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .agentx-message-canvas-note__button {
-  border: 1px solid rgba(51, 65, 85, 0.88);
+  position: relative;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--agentx-code-canvas-accent) 35%, rgba(51, 65, 85, 0.88));
   border-radius: 0.75rem;
   background: rgba(15, 23, 42, 0.74);
   color: rgba(226, 232, 240, 0.92);
@@ -538,24 +632,27 @@ button {
 }
 
 .agentx-message-canvas-note__button:hover {
-  border-color: rgba(103, 232, 249, 0.24);
+  border-color: var(--agentx-code-canvas-accent-strong);
   color: #f8fafc;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--agentx-code-canvas-accent) 26%, transparent);
 }
 
 .agentx-message-canvas-note__button:focus-visible {
   outline: none;
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  border-color: var(--agentx-code-canvas-accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agentx-code-canvas-accent) 28%, transparent);
 }
 
 @keyframes agentx-code-canvas-pulse {
   0%,
   100% {
-    opacity: 0.28;
+    opacity: 0.25;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--agentx-code-canvas-accent) 14%, transparent);
   }
 
   50% {
-    opacity: 0.48;
+    opacity: 0.5;
+    box-shadow: 0 0 26px color-mix(in srgb, var(--agentx-code-canvas-accent) 36%, transparent);
   }
 }
 

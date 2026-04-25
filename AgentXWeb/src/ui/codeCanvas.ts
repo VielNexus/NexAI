@@ -4,12 +4,21 @@ export type CodeCanvasLanguage =
   | "typescript"
   | "javascript"
   | "python"
+  | "ruby"
+  | "cpp"
+  | "c"
+  | "csharp"
+  | "java"
+  | "go"
+  | "php"
+  | "rust"
   | "html"
   | "css"
   | "json"
+  | "yaml"
+  | "sql"
   | "shell"
-  | "csharp"
-  | "rust"
+  | "markdown"
   | "text";
 
 export type CodeCanvasViewMode = "docked" | "fullscreen";
@@ -75,12 +84,21 @@ const languagePatterns: Array<{ language: CodeCanvasLanguage; patterns: RegExp[]
   { language: "typescript", patterns: [/\btypescript\b/i, /\binterface\s+\w+/, /\btype\s+\w+\s*=/, /:\s*(string|number|boolean|React\.)/, /import\s+type\s+/] },
   { language: "javascript", patterns: [/\bjavascript\b/i, /\bconst\s+\w+\s*=/, /\bexport\s+default\b/, /=>\s*{/, /function\s+\w+\s*\(/] },
   { language: "python", patterns: [/\bpython\b/i, /^\s*def\s+\w+\(/m, /^\s*class\s+\w+/m, /^\s*import\s+\w+/m, /if __name__ == ["']__main__["']:/] },
+  { language: "ruby", patterns: [/\bruby\b/i, /^\s*def\s+\w+/m, /^\s*class\s+\w+/m, /\bputs\s+["']/m, /^\s*require\s+["']/m] },
+  { language: "cpp", patterns: [/\bc\+\+\b/i, /#include\s*<[^>]+>/, /std::\w+/, /\bcout\s*<</, /\busing\s+namespace\s+std/] },
+  { language: "c", patterns: [/\bc\b/i, /#include\s*<stdio\.h>/, /\bprintf\s*\(/, /\bmalloc\s*\(/, /\bint\s+main\s*\(/] },
+  { language: "csharp", patterns: [/\bc#\b/i, /\bcsharp\b/i, /\bnamespace\s+\w+/, /\busing\s+System\b/, /\bpublic\s+class\s+\w+/] },
+  { language: "java", patterns: [/\bjava\b/i, /\bpublic\s+static\s+void\s+main\s*\(/, /\bSystem\.out\.println\s*\(/, /\bpublic\s+class\s+\w+/] },
+  { language: "go", patterns: [/\bgolang\b/i, /^\s*package\s+main/m, /\bfmt\.Println\s*\(/, /\bfunc\s+main\s*\(/] },
+  { language: "php", patterns: [/\bphp\b/i, /<\?php/, /\$\w+\s*=/, /\becho\s+["']/] },
+  { language: "rust", patterns: [/\brust\b/i, /\bfn\s+\w+\s*\(/, /\blet\s+mut\s+\w+/, /\bimpl\s+\w+/, /\bpub\s+struct\s+\w+/] },
   { language: "html", patterns: [/\bhtml\b/i, /<!DOCTYPE html>/i, /<html[\s>]/i, /<div[\s>]/i, /<script[\s>]/i] },
   { language: "css", patterns: [/\bcss\b/i, /[.#][\w-]+\s*\{/, /:\s*[\w#().,% -]+;/, /@media\s*\(/] },
   { language: "json", patterns: [/\bjson\b/i, /^\s*\{[\s\S]*\}\s*$/m, /"\w+"\s*:\s*["{\[]/] },
+  { language: "yaml", patterns: [/\byaml\b/i, /\byml\b/i, /^\s*[\w.-]+:\s*.+$/m, /^\s*-\s+[\w.-]+:/m] },
+  { language: "sql", patterns: [/\bsql\b/i, /^\s*select\s+.+\s+from\s+/im, /^\s*(insert|update|delete)\s+/im, /\bCREATE\s+TABLE\b/i] },
   { language: "shell", patterns: [/\bbash\b/i, /\bshell\b/i, /^\s*#!/m, /^\s*(sudo|npm|pnpm|yarn|git|cd|ls)\b/m] },
-  { language: "csharp", patterns: [/\bc#\b/i, /\bcsharp\b/i, /\bnamespace\s+\w+/, /\busing\s+System\b/, /\bpublic\s+class\s+\w+/] },
-  { language: "rust", patterns: [/\brust\b/i, /\bfn\s+\w+\s*\(/, /\blet\s+mut\s+\w+/, /\bimpl\s+\w+/, /\bpub\s+struct\s+\w+/] },
+  { language: "markdown", patterns: [/\bmarkdown\b/i, /^\s*#{1,6}\s+.+$/m, /^\s*[-*]\s+.+$/m, /\[[^\]]+\]\([^)]+\)/] },
 ];
 
 function detectLanguageFromText(text: string): CodeCanvasLanguage {
@@ -91,17 +109,26 @@ function detectLanguageFromText(text: string): CodeCanvasLanguage {
   return "text";
 }
 
-function normalizeFenceLanguage(value: string): CodeCanvasLanguage {
+export function normalizeCodeCanvasLanguage(value: string): CodeCanvasLanguage {
   const normalized = value.trim().toLowerCase();
   if (normalized === "ts" || normalized === "tsx" || normalized === "typescript") return "typescript";
-  if (normalized === "js" || normalized === "jsx" || normalized === "javascript") return "javascript";
-  if (normalized === "py" || normalized === "python") return "python";
+  if (normalized === "js" || normalized === "jsx" || normalized === "javascript" || normalized === "node") return "javascript";
+  if (normalized === "py" || normalized === "python" || normalized === "python3") return "python";
+  if (normalized === "rb" || normalized === "ruby") return "ruby";
+  if (normalized === "cpp" || normalized === "c++" || normalized === "cc" || normalized === "cxx" || normalized === "hpp") return "cpp";
+  if (normalized === "c" || normalized === "h") return "c";
+  if (normalized === "cs" || normalized === "c#" || normalized === "csharp") return "csharp";
+  if (normalized === "java") return "java";
+  if (normalized === "go" || normalized === "golang") return "go";
+  if (normalized === "php") return "php";
+  if (normalized === "rs" || normalized === "rust") return "rust";
   if (normalized === "html" || normalized === "xml") return "html";
   if (normalized === "css" || normalized === "scss") return "css";
   if (normalized === "json") return "json";
-  if (normalized === "sh" || normalized === "bash" || normalized === "shell" || normalized === "zsh") return "shell";
-  if (normalized === "cs" || normalized === "csharp") return "csharp";
-  if (normalized === "rs" || normalized === "rust") return "rust";
+  if (normalized === "yaml" || normalized === "yml") return "yaml";
+  if (normalized === "sql") return "sql";
+  if (normalized === "sh" || normalized === "bash" || normalized === "shell" || normalized === "zsh" || normalized === "powershell" || normalized === "ps1") return "shell";
+  if (normalized === "md" || normalized === "markdown") return "markdown";
   return detectLanguageFromText(normalized);
 }
 
@@ -113,7 +140,7 @@ function extractLargestFence(content: string): { language: CodeCanvasLanguage; c
     if (!code) continue;
     if (!best || code.length > best.code.length) {
       best = {
-        language: normalizeFenceLanguage(match[1] || ""),
+        language: normalizeCodeCanvasLanguage(match[1] || ""),
         code,
       };
     }
@@ -155,16 +182,26 @@ function extractCodeBody(content: string): { code: string; language: CodeCanvasL
   };
 }
 
-function languageLabel(language: CodeCanvasLanguage): string {
-  if (language === "typescript") return "TypeScript";
-  if (language === "javascript") return "JavaScript";
-  if (language === "python") return "Python";
-  if (language === "html") return "HTML";
-  if (language === "css") return "CSS";
-  if (language === "json") return "JSON";
-  if (language === "shell") return "Shell";
-  if (language === "csharp") return "C#";
-  if (language === "rust") return "Rust";
+export function languageLabel(language: CodeCanvasLanguage | string): string {
+  const normalized = typeof language === "string" ? normalizeCodeCanvasLanguage(language) : language;
+  if (normalized === "typescript") return "TypeScript";
+  if (normalized === "javascript") return "JavaScript";
+  if (normalized === "python") return "Python";
+  if (normalized === "ruby") return "Ruby";
+  if (normalized === "cpp") return "C++";
+  if (normalized === "c") return "C";
+  if (normalized === "csharp") return "C#";
+  if (normalized === "java") return "Java";
+  if (normalized === "go") return "Go";
+  if (normalized === "php") return "PHP";
+  if (normalized === "rust") return "Rust";
+  if (normalized === "html") return "HTML";
+  if (normalized === "css") return "CSS";
+  if (normalized === "json") return "JSON";
+  if (normalized === "yaml") return "YAML";
+  if (normalized === "sql") return "SQL";
+  if (normalized === "shell") return "Shell";
+  if (normalized === "markdown") return "Markdown";
   return "Code";
 }
 
@@ -270,7 +307,7 @@ export function deserializeCodeCanvasState(raw: string | null, now = Date.now())
     return {
       ...DEFAULT_STATE,
       ...state,
-      language: typeof state.language === "string" ? normalizeFenceLanguage(state.language) : "text",
+      language: typeof state.language === "string" ? normalizeCodeCanvasLanguage(state.language) : "text",
       viewMode: state.viewMode === "fullscreen" ? "fullscreen" : "docked",
       companions: state.companions && typeof state.companions === "object" ? state.companions as Record<string, CodeCanvasCompanion> : {},
       sources: state.sources && typeof state.sources === "object" ? state.sources as Record<string, { content: string; language: CodeCanvasLanguage; title: string }> : {},
@@ -309,6 +346,6 @@ export function saveCodeCanvasState(state: CodeCanvasState) {
   }
 }
 
-export function languageAccentClass(language: CodeCanvasLanguage): string {
-  return `agentx-code-canvas--${language}`;
+export function languageAccentClass(language: CodeCanvasLanguage | string): string {
+  return `agentx-code-canvas--${normalizeCodeCanvasLanguage(language)}`;
 }

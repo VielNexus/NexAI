@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../tokens";
 import type { CodeCanvasLanguage, CodeCanvasState } from "../codeCanvas";
-import { languageAccentClass } from "../codeCanvas";
+import { languageAccentClass, languageLabel } from "../codeCanvas";
 
 type Props = {
   canvas: CodeCanvasState;
@@ -9,19 +9,6 @@ type Props = {
   onClose: () => void;
   onSendSelection: (payload: { scope: "selection" | "document"; content: string; language: CodeCanvasLanguage }) => void;
 };
-
-function languageLabel(language: CodeCanvasLanguage): string {
-  if (language === "typescript") return "TypeScript";
-  if (language === "javascript") return "JavaScript";
-  if (language === "python") return "Python";
-  if (language === "html") return "HTML";
-  if (language === "css") return "CSS";
-  if (language === "json") return "JSON";
-  if (language === "shell") return "Shell";
-  if (language === "csharp") return "C#";
-  if (language === "rust") return "Rust";
-  return "Code";
-}
 
 export function CodeCanvas({ canvas, onUpdate, onClose, onSendSelection }: Props) {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
