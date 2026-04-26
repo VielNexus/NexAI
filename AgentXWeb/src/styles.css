@@ -2011,3 +2011,40 @@ input[type="checkbox"] {
   }
 }
 
+
+/* Prevent sidebar button/status glow from bleeding into the main chat area. */
+.agentx-sidebar,
+.agentx-shell__sidebar,
+.sidebar {
+  isolation: isolate;
+  overflow: hidden;
+  contain: paint;
+}
+
+.agentx-sidebar__content,
+.agentx-sidebar__body,
+.agentx-shell__sidebar-content {
+  overflow-x: hidden;
+}
+
+/* Keep the glow inside sidebar cards instead of spilling past their rounded edges. */
+.agentx-sidebar .agentx-card,
+.agentx-sidebar .agentx-panel,
+.agentx-sidebar .agentx-sidebar__section,
+.agentx-shell__sidebar .agentx-card,
+.agentx-shell__sidebar .agentx-panel,
+.agentx-shell__sidebar .agentx-sidebar__section {
+  overflow: hidden;
+  contain: paint;
+}
+
+/* Slightly tame sidebar-only glow so active states stay clean but do not smear into neighboring panes. */
+.agentx-sidebar .agentx-status,
+.agentx-sidebar .agentx-button,
+.agentx-sidebar button,
+.agentx-shell__sidebar .agentx-status,
+.agentx-shell__sidebar .agentx-button,
+.agentx-shell__sidebar button {
+  max-width: 100%;
+}
+
