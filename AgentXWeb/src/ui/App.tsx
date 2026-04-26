@@ -55,6 +55,87 @@ import { defaultCodeCanvasState, detectCodeCanvas, languageLabel, loadCodeCanvas
 import { applyPendingLayoutToSettings, clearPendingLayoutSave, loadPendingLayoutSave, pendingLayoutChangedEventName } from "./layoutPersistence";
 import { buildSendFailureMessage, isAbortError, restoreDraftAfterSendFailure, restoreDraftAfterStop, rollbackOptimisticThread } from "./chatSend";
 
+type ScriptModelLabelSource = {
+  model_provider?: string | null;
+  model_name?: string | null;
+  modelProvider?: string | null;
+  modelName?: string | null;
+};
+
+function scriptModelLabel(script: ScriptModelLabelSource): string {
+  const provider = String(script.model_provider ?? script.modelProvider ?? "").trim();
+  const model = String(script.model_name ?? script.modelName ?? "").trim();
+
+  if (provider && model) return `${provider}: ${model}`;
+  if (model) return model;
+  if (provider) return provider;
+  return "Unknown model";
+}
+
+
+type ScriptUtilitySource = {
+  title?: string | null;
+  language?: string | null;
+  created_at?: string | number | null;
+  updated_at?: string | number | null;
+};
+
+function scriptTimestamp(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "Unknown time";
+
+  const raw = typeof value === "number" ? value : Number(value);
+  const date = Number.isFinite(raw)
+    ? new Date(raw < 1000000000000 ? raw * 1000 : raw)
+    : new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function scriptExtension(language: string | null | undefined): string {
+  const normalized = String(language ?? "").trim().toLowerCase();
+
+  if (["python", "py"].includes(normalized)) return "py";
+  if (["javascript", "js"].includes(normalized)) return "js";
+  if (["typescript", "ts"].includes(normalized)) return "ts";
+  if (["ruby", "rb"].includes(normalized)) return "rb";
+  if (["cpp", "c++", "cc", "cxx"].includes(normalized)) return "cpp";
+  if (["c"].includes(normalized)) return "c";
+  if (["csharp", "c#"].includes(normalized)) return "cs";
+  if (["java"].includes(normalized)) return "java";
+  if (["go", "golang"].includes(normalized)) return "go";
+  if (["php"].includes(normalized)) return "php";
+  if (["sql"].includes(normalized)) return "sql";
+  if (["json"].includes(normalized)) return "json";
+  if (["yaml", "yml"].includes(normalized)) return "yml";
+  if (["html"].includes(normalized)) return "html";
+  if (["css"].includes(normalized)) return "css";
+  if (["bash", "shell", "sh"].includes(normalized)) return "sh";
+  if (["powershell", "ps1"].includes(normalized)) return "ps1";
+  if (["markdown", "md"].includes(normalized)) return "md";
+
+  return "txt";
+}
+
+function filenameForScript(script: ScriptUtilitySource): string {
+  const title = String(script.title ?? "agentx-script")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return `${title || "agentx-script"}.${scriptExtension(script.language)}`;
+}
+
+
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
