@@ -1007,6 +1007,186 @@ def _collaborative_review_prompt(
     return _ollama_prompt(review_system, retrieved, [{"role": "user", "content": review_user}])
 
 
+
+def _wants_third_party_dependencies(user_message: str) -> bool:
+    text = (user_message or "").lower()
+    return any(phrase in text for phrase in (
+        "use watchdog", "watchdog", "use dependencies", "external dependency",
+        "third-party", "third party", "pip install", "package", "library",
+        "file watcher", "filesystem watcher",
+    ))
+
+
+def _extract_fenced_code_blocks(text: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    for match in re.finditer(r"```([A-Za-z0-9_+.-]*)\s*\n(.*?)```", text or "", re.DOTALL):
+        blocks.append(((match.group(1) or "").strip().lower(), match.group(2) or ""))
+    return blocks
+
+
+def _primary_code_text(text: str) -> str:
+    blocks = _extract_fenced_code_blocks(text)
+    if not blocks:
+        return text or ""
+    return max((code for _, code in blocks), key=len, default=text or "")
+
+
+def _detect_code_language(text: str, user_message: str) -> str:
+    requested = (user_message or "").lower()
+    if "powershell" in requested or ".ps1" in requested:
+        return "powershell"
+    if "python" in requested or ".py" in requested:
+        return "python"
+    for lang, _code in _extract_fenced_code_blocks(text):
+        if lang in {"python", "py"}:
+            return "python"
+        if lang in {"powershell", "ps1", "pwsh"}:
+            return "powershell"
+    code = _primary_code_text(text)
+    if "param(" in code or "Get-ChildItem" in code or "Export-Csv" in code:
+        return "powershell"
+    if "argparse" in code or "def main" in code or "import " in code:
+        return "python"
+    return "unknown"
+
+
+def _collaborative_quality_gate(original_request: str, final_answer: str) -> dict:
+    """Heuristic quality checks for collaborative coding output.
+
+    These checks do not execute generated code. They catch recurring misses and feed a
+    concise failure list into one repair pass.
+    """
+    request = (original_request or "").lower()
+    answer = final_answer or ""
+    answer_l = answer.lower()
+    code = _primary_code_text(answer)
+    code_l = code.lower()
+    lang = _detect_code_language(answer, original_request)
+    failures: list[str] = []
+    warnings: list[str] = []
+
+    def has_any(*needles: str) -> bool:
+        return any(needle.lower() in code_l for needle in needles)
+
+    wants_cli = any(word in request for word in ("script", "cli", "command", "powershell", "python"))
+    wants_monitor = any(word in request for word in ("monitor", "watch", "watcher", "continuously", "poll"))
+    wants_report = any(word in request for word in ("csv", "export", "report"))
+    moves_files = any(word in request for word in ("move", "moving", "delete", "deleting", "rename", "renaming"))
+    duplicate_hash = "duplicate" in request and any(word in request for word in ("hash", "files", "file"))
+    folder_organizer = any(word in request for word in ("extension", "categorized", "category", "organize", "folder")) and moves_files
+
+    if "copy code" in answer_l:
+        failures.append("Remove literal 'Copy code' labels from the final answer.")
+    if "c:\\path\\to" in answer_l or "c:/path/to" in answer_l:
+        failures.append("Do not leave placeholder paths like C:\\path\\to in the final solution.")
+    if "from draftreview" in code_l or "import draftreview" in code_l:
+        failures.append("Remove the fake/unrequested draftreview dependency; Draft Review is a workflow label, not a Python package.")
+    if "import watchdog" in code_l or "from watchdog" in code_l:
+        if not _wants_third_party_dependencies(original_request):
+            failures.append("Do not keep watchdog or other third-party file watcher dependencies unless the user requested/allowed them; use a standard-library polling loop instead.")
+    if wants_report and not has_any("csv", "export-csv", "dictwriter", "writerow", "export_csv", "export_to_csv"):
+        failures.append("The user asked for CSV/export/report output; implement real CSV/report output.")
+
+    if lang == "python":
+        if wants_cli and "argparse" not in code_l:
+            failures.append("Python CLI scripts must use argparse.")
+        if "os.scandir" in code_l and re.search(r"\bentry\.suffix\b|\bentry\.stem\b", code):
+            failures.append("Do not use pathlib-only attributes like .suffix or .stem directly on os.DirEntry; use Path(entry.path) or Path.iterdir().")
+        if "--interval" in code_l and not re.search(r"time\.sleep\([^\)]*interval", code, re.IGNORECASE):
+            failures.append("The --interval argument is declared but not used in the monitoring sleep loop.")
+        if wants_monitor and not ("while true" in code_l or "observer" in code_l or "watchdog" in code_l or "time.sleep" in code_l):
+            failures.append("The user asked to monitor; implement continuous monitoring/polling rather than a one-time scan.")
+        if moves_files and "--dry-run" not in code_l:
+            failures.append("File-moving/deleting scripts should include --dry-run when practical.")
+        if moves_files and not re.search(r"while\s+.*exists\s*\(", code, re.IGNORECASE) and "unique" not in code_l and "counter" not in code_l:
+            failures.append("Handle destination filename collisions by generating a unique destination path instead of overwriting or silently skipping.")
+        if wants_monitor and moves_files and not any(term in code_l for term in ("stable", "stability", "wait_for_file", "is_file_ready", "size_before", "size_after")):
+            failures.append("Monitoring scripts that move files should include a simple file-stability check before moving active/copying/downloading files.")
+        if folder_organizer and "--dest-root" not in code_l and "dest_root" not in code_l and "dest root" not in answer_l:
+            warnings.append("Consider using --dest-root so categorized folders have clear, predictable placement.")
+        if "production-ready" in answer_l:
+            required = "--dry-run" in code_l and ("counter" in code_l or "unique" in code_l) and ("stable" in code_l or "stability" in code_l)
+            if not required:
+                failures.append("Do not call the result production-ready unless it includes dry-run, collision handling, input validation, destination safety, and file-stability handling.")
+
+    if lang == "powershell":
+        if wants_cli and "param(" not in code_l:
+            failures.append("PowerShell scripts should use a param() block instead of hardcoded variables or Read-Host unless interactive mode is requested.")
+        if "read-host" in code_l and "interactive" not in request:
+            failures.append("Use param() instead of Read-Host unless the user requested interactive input.")
+        if "import-module" in code_l and any(term in code_l for term in ("psscriptanalyzer", "hashtable", "hashtableutils", "compression.powershellutils")):
+            failures.append("Remove unnecessary/fake Import-Module statements for built-in PowerShell functionality.")
+        if duplicate_hash:
+            if "get-filehash" not in code_l:
+                failures.append("Duplicate-by-hash scripts must use Get-FileHash or another explicit hashing method.")
+            if "get-filehash -path" in code_l and "get-filehash -literalpath" not in code_l:
+                failures.append("Use Get-FileHash -LiteralPath for discovered filesystem paths.")
+            if "export-csv" not in code_l:
+                failures.append("Duplicate report scripts should export results with Export-Csv, not Add-Content or manual strings.")
+            for column in ("hash", "filename", "fullpath", "sizebytes", "modifiedtime", "duplicatecount"):
+                if column not in code_l:
+                    failures.append(f"Duplicate report is missing the {column} column/field.")
+            if "readallbytes" in code_l:
+                failures.append("Avoid loading whole large files into memory when hashing; use Get-FileHash -LiteralPath.")
+        if "add-content" in code_l and wants_report:
+            failures.append("Use Export-Csv for CSV reports instead of Add-Content/manual CSV text.")
+        if "-jo" in code_l:
+            failures.append("Remove invalid/made-up PowerShell operators such as -jo; use the real -join operator if needed.")
+        if re.search(r"Generic\.List\[[^\]]+\]\]::new\([^\)]*(FileInfo|\$file)", code):
+            failures.append("Initialize Generic.List empty, then call .Add(); do not pass FileInfo directly to ::new().")
+        if re.search(r"\$\([^\)]*\bgroups\)", code, re.IGNORECASE):
+            failures.append("Do not put invalid expressions inside expandable strings; calculate group counts before Write-Host/Write-Output.")
+
+    return {"passed": not failures, "language": lang, "failures": failures, "warnings": warnings}
+
+
+def _collaborative_repair_prompt(
+    *,
+    system_prompt: str,
+    retrieved: str,
+    original_request: str,
+    draft_model: str,
+    review_model: str,
+    draft: str,
+    reviewed_answer: str,
+    gate: dict,
+) -> str:
+    failures = gate.get("failures") or []
+    warnings = gate.get("warnings") or []
+    lines = [
+        "You are the repair pass in AgentX Collaborative Coding mode.",
+        "The previous reviewed/finalized answer failed deterministic quality checks.",
+        "Repair the answer. Return one complete final answer only.",
+        "Do not explain the checklist. Do not return a diff. Do not return the failed version unchanged.",
+        "The original user request is the source of truth.",
+        "",
+        _collaborative_reviewer_contract(),
+        "",
+        f"Draft model: {draft_model}",
+        f"Review/final model: {review_model}",
+        f"Detected language: {gate.get('language') or 'unknown'}",
+        "",
+        "Quality gate failures to fix:",
+    ]
+    lines.extend(f"- {failure}" for failure in failures)
+    if warnings:
+        lines.append("")
+        lines.append("Quality gate warnings to consider:")
+        lines.extend(f"- {warning}" for warning in warnings)
+    lines.extend([
+        "",
+        "Original user request:",
+        original_request,
+        "",
+        "First draft:",
+        draft,
+        "",
+        "Reviewed answer that failed checks:",
+        reviewed_answer,
+    ])
+    repair_system = system_prompt + "\n\nCollaborative coding pipeline stage 3: deterministic quality-gate repair."
+    return _ollama_prompt(repair_system, retrieved, [{"role": "user", "content": "\n".join(lines)}])
+
 def _stream_event(event: str, payload: dict | None = None) -> str:
     data = {"event": event}
     if payload:
@@ -1110,8 +1290,7 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                     review_model=review_model,
                     draft=draft,
                 )
-                chunks: list[str] = []
-                for chunk in ollama_generate_stream(
+                content = ollama_generate(
                     cfg=OllamaConfig(
                         base_url=base_url,
                         model=review_model,
@@ -1119,14 +1298,50 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                         max_tool_iters=max(1, int(getattr(config, "ollama_tool_max_iters", 4))),
                     ),
                     prompt=review_prompt,
-                ):
-                    if first_token_at is None and chunk:
-                        first_token_at = time.perf_counter()
-                    chunks.append(chunk)
-                    yield _stream_event("delta", {"content": chunk})
-                content = finalize_response_text("".join(chunks), response_mode=response_mode)
+                )
+                content = finalize_response_text(content, response_mode=response_mode)
                 if not content:
                     raise HTTPException(status_code=502, detail=f"Review model {review_model} returned an empty response.")
+
+                gate = _collaborative_quality_gate(request.message, content)
+                behavior = getattr(settings, "modelBehavior", None)
+                if not gate.get("passed") and _behavior_flag(behavior, "autoRepairEnabled", True):
+                    yield _stream_event(
+                        "meta",
+                        {
+                            "stage": "repair",
+                            "provider": "ollama",
+                            "model": review_model,
+                            "quality_gate": gate,
+                            "ts": time.time(),
+                        },
+                    )
+                    repair_prompt = _collaborative_repair_prompt(
+                        system_prompt=system_prompt,
+                        retrieved=retrieved,
+                        original_request=request.message,
+                        draft_model=draft_model,
+                        review_model=review_model,
+                        draft=draft,
+                        reviewed_answer=content,
+                        gate=gate,
+                    )
+                    repaired = ollama_generate(
+                        cfg=OllamaConfig(
+                            base_url=base_url,
+                            model=review_model,
+                            timeout_s=timeout_s,
+                            max_tool_iters=max(1, int(getattr(config, "ollama_tool_max_iters", 4))),
+                        ),
+                        prompt=repair_prompt,
+                    )
+                    repaired = finalize_response_text(repaired, response_mode=response_mode)
+                    if repaired:
+                        content = repaired
+                        gate = _collaborative_quality_gate(request.message, content)
+
+                first_token_at = time.perf_counter()
+                yield _stream_event("delta", {"content": content})
                 metrics = _response_metrics(
                     started_at=request_started_at,
                     first_token_at=first_token_at,

@@ -260,14 +260,14 @@ export function SettingsPage(props: Props) {
                   />
                   <span>Windows-aware examples</span>
                 </label>
-                <label className="flex items-center gap-2" title="Reserved for the next quality-gate pass.">
+                <label className="flex items-center gap-2" title="Runs deterministic checks after Draft + Review and sends one repair pass when checks fail.">
                   <input
                     type="checkbox"
                     checked={modelBehavior.autoRepairEnabled}
                     disabled={loading || !modelBehavior.enabled}
                     onChange={(e) => updateModelBehavior({ autoRepairEnabled: e.target.checked })}
                   />
-                  <span>Auto-repair missed requirements</span>
+                  <span>Quality gate auto-repair</span>
                 </label>
               </div>
 
