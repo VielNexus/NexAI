@@ -1238,7 +1238,7 @@ ${script.content}
 
   const send = useCallback(async (
     overrideText?: string,
-    overrideSelection?: { provider: string; model: string; suppressHandoff?: boolean; codingPipeline?: CodingPipelineRequest | null; assistantLabel?: string }
+    overrideSelection?: { provider: string; model: string; suppressHandoff?: boolean; codingPipeline?: CodingPipelineRequest | null; assistantLabel?: string; preserveCurrentSelection?: boolean }
   ) => {
     const text = (overrideText ?? draft).trim();
     if (!text || sending) return;
@@ -1274,13 +1274,15 @@ ${script.content}
       }
     }
 
-    if (overrideSelection) {
+    const shouldPersistSelection = Boolean(overrideSelection && !overrideSelection.preserveCurrentSelection);
+
+    if (shouldPersistSelection) {
       setChatProvider(provider);
       setChatModel(effectiveModel);
     }
 
     let thread = activeThread;
-    if (thread && overrideSelection) {
+    if (thread && shouldPersistSelection) {
       try {
         thread = await updateThreadModel(thread.id, provider, effectiveModel);
         setActiveThread(thread);
@@ -1499,6 +1501,7 @@ ${script.content}
       model: reviewModel,
       suppressHandoff: true,
       assistantLabel: `${draftModel} → ${reviewModel}`,
+      preserveCurrentSelection: true,
       codingPipeline: {
         mode: "draft_review",
         draft_model: draftModel,

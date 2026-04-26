@@ -1082,9 +1082,17 @@ def _collaborative_quality_gate(original_request: str, final_answer: str) -> dic
         failures.append("Do not leave placeholder paths like C:\\path\\to in the final solution.")
     if "from draftreview" in code_l or "import draftreview" in code_l:
         failures.append("Remove the fake/unrequested draftreview dependency; Draft Review is a workflow label, not a Python package.")
+    if "pip install os" in answer_l or "pip install argparse" in answer_l or "pip install shutil" in answer_l:
+        failures.append("Do not include pip install commands for Python standard-library modules such as os, argparse, or shutil.")
     if "import watchdog" in code_l or "from watchdog" in code_l:
         if not _wants_third_party_dependencies(original_request):
-            failures.append("Do not keep watchdog or other third-party file watcher dependencies unless the user requested/allowed them; use a standard-library polling loop instead.")
+            failures.append("Remove watchdog/Observer imports and rewrite monitoring with a standard-library polling loop unless the user explicitly requested third-party file watcher dependencies.")
+    if ("pip install watchdog" in answer_l or "watchdog library" in answer_l) and not _wants_third_party_dependencies(original_request):
+        failures.append("Do not recommend or require watchdog unless the user explicitly requested third-party dependencies; use standard-library polling instead.")
+    if "production-ready" in answer_l and ("watchdog" in code_l or "except exception" in code_l):
+        failures.append("Do not call the result production-ready when it still uses unrequested dependencies or broad exception handling.")
+    if "handles all edge cases" in answer_l or "all edge cases" in answer_l:
+        failures.append("Do not claim the script handles all edge cases; keep the explanation accurate and modest.")
     if wants_report and not has_any("csv", "export-csv", "dictwriter", "writerow", "export_csv", "export_to_csv"):
         failures.append("The user asked for CSV/export/report output; implement real CSV/report output.")
 
@@ -1103,8 +1111,20 @@ def _collaborative_quality_gate(original_request: str, final_answer: str) -> dic
             failures.append("Handle destination filename collisions by generating a unique destination path instead of overwriting or silently skipping.")
         if wants_monitor and moves_files and not any(term in code_l for term in ("stable", "stability", "wait_for_file", "is_file_ready", "size_before", "size_after")):
             failures.append("Monitoring scripts that move files should include a simple file-stability check before moving active/copying/downloading files.")
-        if folder_organizer and "--dest-root" not in code_l and "dest_root" not in code_l and "dest root" not in answer_l:
-            warnings.append("Consider using --dest-root so categorized folders have clear, predictable placement.")
+        if wants_monitor and moves_files and ("stable" in code_l or "stability" in code_l):
+            has_size_based_stability = any(term in code_l for term in ("st_size", ".stat().st_size", "size_before", "size_after", "first_size", "second_size"))
+            if not has_size_based_stability:
+                failures.append("File-stability checks should compare file size/metadata across a short delay, not only open or seek the file once.")
+        if moves_files and "shutil.move" in code_l and re.search(r"print\([^\n]*(ext_dir\s*/\s*item\.name|/\s*item\.name)", code):
+            failures.append("When collision handling may rename the destination, log the actual final destination path, not the original filename path.")
+        if re.search(r"for\s+\w+\s+in[^:]+:\s*\n\s*.*MoveFileHandler\(", code, re.IGNORECASE | re.DOTALL):
+            failures.append("Do not instantiate the monitoring/file handler inside the per-file loop; create it once and reuse it.")
+        if "--interval" in code_l and not re.search(r"interval\s*<\s*=?\s*0|interval\s*<\s*1|parser\.error\([^\)]*interval", code, re.IGNORECASE):
+            failures.append("Validate that --interval is positive before starting the monitoring loop.")
+        if folder_organizer and "--dest-root" not in code_l and "dest_root" not in code_l and "dest root" not in answer_l and "--dest" not in code_l:
+            warnings.append("Consider using --dest-root/--dest so categorized folders have clear, predictable placement.")
+        if "exit(1)" in code_l and "sys.exit" not in code_l:
+            warnings.append("Prefer sys.exit(1) over bare exit(1) in Python scripts.")
         if "production-ready" in answer_l:
             required = "--dry-run" in code_l and ("counter" in code_l or "unique" in code_l) and ("stable" in code_l or "stability" in code_l)
             if not required:
@@ -1207,6 +1227,8 @@ def _collaborative_repair_prompt(
         "Repair the answer. Return one complete final answer only.",
         "Do not explain the checklist. Do not return a diff. Do not return the failed version unchanged.",
         "The original user request is the source of truth.",
+        "Every quality gate failure below is mandatory. If a failure says to remove a dependency, rewrite the code so that dependency is gone.",
+        "For Python folder monitors, default to standard-library polling unless the user explicitly requested watchdog or third-party file watcher packages.",
         "",
         _collaborative_reviewer_contract(),
         "",
@@ -1356,39 +1378,45 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                 repair_attempted = False
                 repaired_successfully = False
                 behavior = getattr(settings, "modelBehavior", None)
-                if not gate.get("passed") and _behavior_flag(behavior, "autoRepairEnabled", True):
-                    repair_attempted = True
-                    yield _stream_event(
-                        "meta",
-                        {
-                            "stage": "repair",
-                            "provider": "ollama",
-                            "model": review_model,
-                            "quality_gate": gate,
-                            "ts": time.time(),
-                        },
-                    )
-                    repair_prompt = _collaborative_repair_prompt(
-                        system_prompt=system_prompt,
-                        retrieved=retrieved,
-                        original_request=request.message,
-                        draft_model=draft_model,
-                        review_model=review_model,
-                        draft=draft,
-                        reviewed_answer=content,
-                        gate=gate,
-                    )
-                    repaired = ollama_generate(
-                        cfg=OllamaConfig(
-                            base_url=base_url,
-                            model=review_model,
-                            timeout_s=timeout_s,
-                            max_tool_iters=max(1, int(getattr(config, "ollama_tool_max_iters", 4))),
-                        ),
-                        prompt=repair_prompt,
-                    )
-                    repaired = finalize_response_text(repaired, response_mode=response_mode)
-                    if repaired:
+                if _behavior_flag(behavior, "autoRepairEnabled", True):
+                    repair_pass = 0
+                    max_repair_passes = 2
+                    while not gate.get("passed") and repair_pass < max_repair_passes:
+                        repair_pass += 1
+                        repair_attempted = True
+                        yield _stream_event(
+                            "meta",
+                            {
+                                "stage": "repair",
+                                "provider": "ollama",
+                                "model": review_model,
+                                "repair_pass": repair_pass,
+                                "quality_gate": gate,
+                                "ts": time.time(),
+                            },
+                        )
+                        repair_prompt = _collaborative_repair_prompt(
+                            system_prompt=system_prompt,
+                            retrieved=retrieved,
+                            original_request=request.message,
+                            draft_model=draft_model,
+                            review_model=review_model,
+                            draft=draft,
+                            reviewed_answer=content,
+                            gate=gate,
+                        )
+                        repaired = ollama_generate(
+                            cfg=OllamaConfig(
+                                base_url=base_url,
+                                model=review_model,
+                                timeout_s=timeout_s,
+                                max_tool_iters=max(1, int(getattr(config, "ollama_tool_max_iters", 4))),
+                            ),
+                            prompt=repair_prompt,
+                        )
+                        repaired = finalize_response_text(repaired, response_mode=response_mode)
+                        if not repaired:
+                            break
                         content = repaired
                         repaired_successfully = True
                         gate = _collaborative_quality_gate(request.message, content)
