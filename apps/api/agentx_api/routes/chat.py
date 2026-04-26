@@ -399,6 +399,8 @@ def _ollama_chat_with_tools(*, short_term: list[dict], retrieved: str, user_mess
         "After the tool result, continue and either call another tool or answer normally.",
         "Never write to drive C: (read-only). Prefer non-C drives.",
     ]
+    if _looks_like_coding_request(user_message):
+        system_lines.append(_coding_output_contract())
     if not config.fs_enabled:
         system_lines.append("File tools are disabled (AGENTX_FS_ENABLED=false).")
     if not config.fs_write_enabled:
@@ -785,6 +787,51 @@ def _ollama_prompt(system: str, retrieved: str, conversation: list[dict]) -> str
     return "\n".join(parts)
 
 
+_CODING_INTENT_RE = re.compile(
+    r"\b("
+    r"code|coding|script|program|function|class|cli|api|app|web ?app|component|"
+    r"debug|bug|fix|refactor|implement|build|create|generate|write|make|"
+    r"python|javascript|typescript|react|node|bash|powershell|sql|docker|yaml"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_coding_request(text: str) -> bool:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return False
+    if "```" in cleaned:
+        return True
+    return bool(_CODING_INTENT_RE.search(cleaned))
+
+
+def _coding_output_contract() -> str:
+    return "\n".join(
+        [
+            "Coding output contract:",
+            "- When the user asks for code, return complete, runnable code in one proper fenced code block such as ```python ... ```.",
+            "- Never write literal labels like 'Copy code' or fake USER/ASSISTANT transcript lines.",
+            "- Preserve indentation exactly. Do not flatten code blocks.",
+            "- Prefer the Python standard library unless the user asks for dependencies.",
+            "- For CLI scripts, prefer argparse, validate inputs, and handle PermissionError/OSError without crashing.",
+            "- Include Windows-friendly run examples when paths or commands matter.",
+            "- Keep explanations brief and place them outside the fenced code block.",
+        ]
+    )
+
+
+def _system_prompt_for_request(response_mode: str, user_message: str) -> str:
+    system_prompt = "You are AgentX. Answer directly and helpfully."
+    if _looks_like_coding_request(user_message):
+        system_prompt += "\n\n" + _coding_output_contract()
+    if (response_mode or "chat").strip().lower() == "spoken":
+        system_prompt += (
+            " Spoken mode: answer directly, keep it short, sound natural when read aloud,"
+            " do not include hidden reasoning, no markdown, and no bullet lists unless the user explicitly asks for them."
+        )
+    return system_prompt
+
 
 def _stream_event(event: str, payload: dict | None = None) -> str:
     data = {"event": event}
@@ -841,9 +888,7 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                     if web_parts:
                         retrieved = (retrieved + "\n\n" if retrieved else "") + "\n\n".join(web_parts)
 
-                system_prompt = "You are AgentX."
-                if response_mode == "spoken":
-                    system_prompt += " Spoken mode: answer directly, keep it short, sound natural when read aloud, do not include hidden reasoning, no markdown, and no bullet lists unless the user explicitly asks for them."
+                system_prompt = _system_prompt_for_request(response_mode, request.message)
                 prompt = _ollama_prompt(system_prompt, retrieved, short_term)
                 settings = _read_settings()
                 base_url = normalize_ollama_base_url(effective_ollama_base_url(settings))
@@ -1008,20 +1053,15 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             {
                 "role": "system",
                 "content": (
-                    "You are AgentX.\n"
-                    "You may use tools when needed.\n"
-                    "- Use web_search/web_fetch only if AGENTX_WEB_ENABLED=true.\n"
-                    "- Only save to RAG via rag_upsert when the user explicitly asks you to remember something.\n"
-                    "- File-system tools are available only if AGENTX_FS_ENABLED=true. Writes are further gated by AGENTX_FS_WRITE_ENABLED.\n"
-                    "- Never write to drive C: (read-only). Prefer working in non-C drives.\n"
+                    _system_prompt_for_request(response_mode, request.message)
+                    + "\nYou may use tools when needed.\n"
+                    + "- Use web_search/web_fetch only if AGENTX_WEB_ENABLED=true.\n"
+                    + "- Only save to RAG via rag_upsert when the user explicitly asks you to remember something.\n"
+                    + "- File-system tools are available only if AGENTX_FS_ENABLED=true. Writes are further gated by AGENTX_FS_WRITE_ENABLED.\n"
+                    + "- Never write to drive C: (read-only). Prefer working in non-C drives.\n"
                 ),
             }
         ]
-        if response_mode == "spoken":
-            messages[0]["content"] += (
-                " Spoken mode: answer directly, keep it short, sound natural when read aloud, do not include hidden reasoning,"
-                " no markdown, and no bullet lists unless the user explicitly asks for them."
-            )
         if retrieved:
             messages.append(
                 {
@@ -1063,9 +1103,7 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
                 if web_parts:
                     retrieved = (retrieved + "\n\n" if retrieved else "") + "\n\n".join(web_parts)
 
-            system_prompt = "You are AgentX."
-            if response_mode == "spoken":
-                system_prompt += " Spoken mode: answer directly, keep it short, sound natural when read aloud, do not include hidden reasoning, no markdown, and no bullet lists unless the user explicitly asks for them."
+            system_prompt = _system_prompt_for_request(response_mode, request.message)
             prompt = _ollama_prompt(system_prompt, retrieved, short_term)
             content = _ollama_generate(prompt, model=model)
         if not content:

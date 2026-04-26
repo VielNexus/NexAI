@@ -41,15 +41,26 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def sanitize_assistant_response(text: str) -> str:
+    """Clean assistant output while preserving markdown/code formatting.
+
+    Chat mode must not strip indentation or collapse all whitespace because that
+    breaks generated code blocks and saved scripts. Spoken mode performs its own
+    aggressive cleanup later.
+    """
     cleaned = _THINK_BLOCK_RE.sub(" ", text or "")
     cleaned = _THINK_TAG_RE.sub(" ", cleaned)
     cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
     cleaned = _strip_leading_meta_lines(cleaned)
     cleaned = _strip_leading_meta_prefixes(cleaned)
-    cleaned = "\n".join(line.strip() for line in cleaned.split("\n"))
+
+    lines = [line.rstrip() for line in cleaned.split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    cleaned = "\n".join(lines)
     cleaned = _MULTI_BLANK_RE.sub("\n\n", cleaned)
-    cleaned = _WHITESPACE_RE.sub(" ", cleaned)
-    cleaned = cleaned.replace(" \n", "\n").replace("\n ", "\n")
     return cleaned.strip()
 
 

@@ -16,6 +16,7 @@ type Props = {
   placeholder?: string;
   className?: string;
   fitToOptions?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function AgentXDropdown({
@@ -27,6 +28,7 @@ export function AgentXDropdown({
   placeholder = "Select",
   className = "",
   fitToOptions = false,
+  onOpenChange,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -36,6 +38,12 @@ export function AgentXDropdown({
   const listRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = useId();
+  const hasInitializedOpenHighlightRef = useRef(false);
+  const shouldScrollHighlightedRef = useRef(false);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [onOpenChange, open]);
 
   const enabledOptions = useMemo(() => options.filter((option) => !option.disabled), [options]);
   const selectedOption = options.find((option) => option.value === value);
@@ -99,13 +107,19 @@ export function AgentXDropdown({
   }, [open, updateMenuPosition]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      hasInitializedOpenHighlightRef.current = false;
+      return;
+    }
+    if (hasInitializedOpenHighlightRef.current) return;
     const selectedEnabledIndex = enabledOptions.findIndex((option) => option.value === value);
     setHighlightedIndex(selectedEnabledIndex >= 0 ? selectedEnabledIndex : 0);
-  }, [enabledOptions, open, value]);
+    hasInitializedOpenHighlightRef.current = true;
+  }, [open, value]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !shouldScrollHighlightedRef.current) return;
+    shouldScrollHighlightedRef.current = false;
     const node = listRef.current?.querySelector<HTMLElement>(`[data-dropdown-index="${highlightedIndex}"]`);
     node?.scrollIntoView({ block: "nearest" });
   }, [highlightedIndex, open]);
@@ -136,6 +150,7 @@ export function AgentXDropdown({
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      shouldScrollHighlightedRef.current = true;
       setHighlightedIndex((current) => {
         if (enabledOptions.length === 0) return -1;
         return current < enabledOptions.length - 1 ? current + 1 : 0;
@@ -145,6 +160,7 @@ export function AgentXDropdown({
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      shouldScrollHighlightedRef.current = true;
       setHighlightedIndex((current) => {
         if (enabledOptions.length === 0) return -1;
         return current > 0 ? current - 1 : enabledOptions.length - 1;

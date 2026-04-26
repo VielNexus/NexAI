@@ -208,6 +208,47 @@ function isEditableElement(element: Element | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
+type HandoffSuggestion = {
+  provider: "ollama";
+  model: string;
+  originalPrompt: string;
+  brainstorm: string;
+};
+
+const CODING_HANDOFF_RE = /\b(code this|build this|create this|generate this|make (?:a |an )?(?:script|app|tool|program)|write (?:a |an )?(?:script|app|tool|program)|turn this into code|implement this|i would like you to code|i want you to code|can you code|create an? app|build an? app)\b/i;
+
+const HEAVY_CODING_MODEL_PRIORITY = [
+  "devstral-small-2:24b-4k-gpu",
+  "qwen2.5-coder:7b-4k-gpu",
+  "qwen35-heretic-neocode:9b-q6-4k-gpu",
+  "dolphincoder:15b-4k-gpu",
+];
+
+function shouldSuggestCodingHandoff(text: string): boolean {
+  return CODING_HANDOFF_RE.test(text || "");
+}
+
+function pickHeavyCodingModel(models: string[], currentModel: string): string | null {
+  const available = new Set(models || []);
+  for (const model of HEAVY_CODING_MODEL_PRIORITY) {
+    if (available.has(model) && model !== currentModel) return model;
+  }
+  return (models || []).find((model) => /devstral|coder|code/i.test(model) && model !== currentModel) ?? null;
+}
+
+function buildHandoffPrompt(suggestion: HandoffSuggestion): string {
+  return [
+    "Use the brainstorm/spec below and implement it now.",
+    "Return production-ready code with proper fenced code blocks, preserved indentation, and brief run instructions.",
+    "",
+    "Original request:",
+    suggestion.originalPrompt,
+    "",
+    "Brainstorm/spec from the previous assistant:",
+    suggestion.brainstorm,
+  ].join("\n");
+}
+
 function threadSelection(thread: Pick<Thread, "chat_provider" | "chat_model"> | null | undefined, fallback: { provider: string; model: string }) {
   const provider = (thread?.chat_provider || fallback.provider || "stub").trim().toLowerCase();
   const model = (thread?.chat_model || fallback.model || "stub").trim();
@@ -297,6 +338,7 @@ export function App() {
 
   const lastServerSelectionRef = useRef<{ provider: string; model: string }>({ provider: "stub", model: "stub" });
   const selectionPersistRef = useRef<Promise<void> | null>(null);
+  const modelDropdownOpenRef = useRef(false);
 
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -325,6 +367,7 @@ export function App() {
   const activeScript = useMemo(() => scripts.find((script) => script.id === activeScriptId) ?? scripts[0] ?? null, [activeScriptId, scripts]);
   const [scriptDraft, setScriptDraft] = useState<{ title: string; content: string; language: string }>({ title: "", content: "", language: "text" });
   const [messageFeedback, setMessageFeedback] = useState<MessageFeedbackMap>(() => loadMessageFeedback());
+  const [handoffSuggestion, setHandoffSuggestion] = useState<HandoffSuggestion | null>(null);
 
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -558,9 +601,11 @@ export function App() {
           setChatModel((prev) => (prev === last.model ? serverModel : prev));
         }
         lastServerSelectionRef.current = { provider: serverProvider, model: serverModel };
-        setAvailableModels(res.available_chat_models ?? {});
-        setModelsRefreshing(Boolean(res.models_refreshing));
-        setModelsError(res.models_error ?? null);
+        if (!modelDropdownOpenRef.current) {
+          setAvailableModels(res.available_chat_models ?? {});
+          setModelsRefreshing(Boolean(res.models_refreshing));
+          setModelsError(res.models_error ?? null);
+        }
         setOllamaBaseUrl(res.ollama_base_url ?? "http://127.0.0.1:11434");
         setProviderEndpointStatus(res.provider_endpoint_status ?? null);
         setProviderModelStatus(res.provider_model_status ?? null);
@@ -1157,7 +1202,7 @@ ${script.content}
     controller.abort();
   }, []);
 
-  const send = useCallback(async (overrideText?: string) => {
+  const send = useCallback(async (overrideText?: string, overrideSelection?: { provider: string; model: string; suppressHandoff?: boolean }) => {
     const text = (overrideText ?? draft).trim();
     if (!text || sending) return;
 
@@ -1167,12 +1212,13 @@ ${script.content}
     }
 
     // Prevent obvious model/provider mismatches (most common source of 502s).
-    const provider = (chatProvider || "stub").toLowerCase();
-    if (provider === "openai" && modelOptions.openai.length > 0 && !modelOptions.openai.includes(chatModel)) {
+    const provider = (overrideSelection?.provider || chatProvider || "stub").toLowerCase();
+    const effectiveModel = (overrideSelection?.model || chatModel || "stub").trim();
+    if (provider === "openai" && modelOptions.openai.length > 0 && !modelOptions.openai.includes(effectiveModel)) {
       setSystemMessage("Selected OpenAI model is not in the discovered list. Pick a valid model from the dropdown.");
       return;
     }
-    if (provider === "ollama" && modelOptions.ollama.length > 0 && !modelOptions.ollama.includes(chatModel)) {
+    if (provider === "ollama" && modelOptions.ollama.length > 0 && !modelOptions.ollama.includes(effectiveModel)) {
       setSystemMessage("Selected Ollama model is not in the discovered list. Pick a valid model from the dropdown.");
       return;
     }
@@ -1191,9 +1237,24 @@ ${script.content}
       }
     }
 
+    if (overrideSelection) {
+      setChatProvider(provider);
+      setChatModel(effectiveModel);
+    }
+
     let thread = activeThread;
+    if (thread && overrideSelection) {
+      try {
+        thread = await updateThreadModel(thread.id, provider, effectiveModel);
+        setActiveThread(thread);
+        setThreads((prev) => prev.map((item) => (item.id === thread!.id ? threadSummary(thread!) : item)));
+      } catch {
+        setSystemMessage("Failed to switch this chat to the handoff model.");
+        return;
+      }
+    }
     if (!thread) {
-      thread = await createThread(undefined, { chatProvider, chatModel, projectId: activeProjectId });
+      thread = await createThread(undefined, { chatProvider: provider, chatModel: effectiveModel, projectId: activeProjectId });
       setActiveThread(thread);
       setThreads((prev) => [threadSummary(thread!), ...prev]);
     }
@@ -1202,6 +1263,7 @@ ${script.content}
     const wasDefaultTitle = !thread.title || thread.title === config.threadTitleDefault;
 
     setDraft("");
+    setHandoffSuggestion(null);
     scheduleComposerFocus({ force: true });
 
     const localUser = { id: createClientId("message"), role: "user" as const, content: text, ts: Date.now() / 1000 };
@@ -1231,7 +1293,7 @@ ${script.content}
 
       const controller = new AbortController();
       activeSendAbortRef.current = controller;
-      const activeModelLabel = chatModel || "AgentX";
+      const activeModelLabel = effectiveModel || "AgentX";
       const localAssistant = {
         id: createClientId("assistant"),
         role: "assistant" as const,
@@ -1315,6 +1377,17 @@ ${script.content}
           sourceMessageId: assistantMessage.id,
         });
       }
+      if (!overrideSelection?.suppressHandoff && shouldSuggestCodingHandoff(text)) {
+        const targetModel = pickHeavyCodingModel(modelOptions.ollama, effectiveModel);
+        if (targetModel) {
+          setHandoffSuggestion({
+            provider: "ollama",
+            model: targetModel,
+            originalPrompt: text,
+            brainstorm: reply.content,
+          });
+        }
+      }
     } catch (e) {
       if (isAbortError(e)) {
         setActiveThread((prev) => {
@@ -1363,6 +1436,14 @@ ${script.content}
   ]);
 
 
+
+  const acceptHandoffSuggestion = useCallback(() => {
+    if (!handoffSuggestion || sending) return;
+    const prompt = buildHandoffPrompt(handoffSuggestion);
+    const selection = { provider: handoffSuggestion.provider, model: handoffSuggestion.model, suppressHandoff: true };
+    setHandoffSuggestion(null);
+    void send(prompt, selection);
+  }, [handoffSuggestion, send, sending]);
 
   const editMessageIntoComposer = useCallback((content: string) => {
     setDraft(content);
@@ -2143,8 +2224,11 @@ ${script.content}
                     options={chatModelDropdownOptions}
                     disabled={!statusOk}
                     placeholder="Select model"
-                    className="max-w-full"
-                    fitToOptions
+                    className="agentx-model-dropdown"
+                    fitToOptions={false}
+                    onOpenChange={(open) => {
+                      modelDropdownOpenRef.current = open;
+                    }}
                     onChange={(nextValue) => {
                       const [provider, ...rest] = nextValue.split(":");
                       const model = rest.join(":");
@@ -2292,6 +2376,24 @@ ${script.content}
                 </div>
 
                 <div className={theme.shell.composer}>
+                  {handoffSuggestion ? (
+                    <div className="agentx-handoff-card">
+                      <div>
+                        <div className="agentx-handoff-card__title">Coding intent detected</div>
+                        <div className="agentx-handoff-card__copy">
+                          Hand this brainstorm to <strong>{handoffSuggestion.model}</strong> for implementation?
+                        </div>
+                      </div>
+                      <div className="agentx-handoff-card__actions">
+                        <button className={tokens.button} type="button" disabled={sending} onClick={acceptHandoffSuggestion}>
+                          Use Heavy Coding
+                        </button>
+                        <button className={tokens.buttonSecondary} type="button" onClick={() => setHandoffSuggestion(null)}>
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <textarea
                     ref={textareaRef}
                     value={draft}
