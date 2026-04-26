@@ -44,6 +44,26 @@ function roleGlyph(role: Message["role"], assistantLabel: string, userLabel: str
   return "S";
 }
 
+function formatDuration(ms?: number | null): string | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return null;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes}m ${rest}s`;
+}
+
+function responseMetricsLabel(message: Message): string | null {
+  const metrics = message.response_metrics;
+  if (!metrics || message.role !== "assistant") return null;
+  const total = formatDuration(metrics.duration_ms);
+  if (!total) return null;
+  const kind = metrics.response_kind === "code" ? "Code" : "Reply";
+  const firstToken = formatDuration(metrics.first_token_ms ?? null);
+  return firstToken ? `${kind} ${total} · first token ${firstToken}` : `${kind} ${total}`;
+}
+
 export function ChatMessage({
   message,
   isLastAssistant,
@@ -73,6 +93,7 @@ export function ChatMessage({
         : "agentx-message-row agentx-message-row--system";
   const showActions = message.role !== "system" && (showIdentity || endsGroup);
   const authorLabel = roleLabel(message.role, assistantLabel, userLabel);
+  const metricsLabel = responseMetricsLabel(message);
 
   return (
     <article className={[rowClass, startsGroup ? "agentx-message-row--start" : "agentx-message-row--continued", endsGroup ? "agentx-message-row--end" : ""].join(" ")}>
@@ -92,6 +113,7 @@ export function ChatMessage({
             <div className="agentx-message-row__identity">
               <span className="agentx-message-row__author">{authorLabel}</span>
               <span className="agentx-message-row__time">{new Date(message.ts * 1000).toLocaleTimeString()}</span>
+              {metricsLabel ? <span className="agentx-message-row__timer">{metricsLabel}</span> : null}
             </div>
             {showActions ? (
               <MessageActions
@@ -115,6 +137,7 @@ export function ChatMessage({
         ) : (
           <div className="agentx-message-row__meta agentx-message-row__meta--continued">
             <span className="agentx-message-row__time">{new Date(message.ts * 1000).toLocaleTimeString()}</span>
+            {metricsLabel ? <span className="agentx-message-row__timer">{metricsLabel}</span> : null}
             {showActions ? (
               <MessageActions
                 role={message.role}

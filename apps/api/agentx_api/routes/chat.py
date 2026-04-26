@@ -63,6 +63,42 @@ class RetrievedChunk(BaseModel):
     score: float
 
 
+class ResponseMetrics(BaseModel):
+    duration_ms: int
+    first_token_ms: int | None = None
+    provider: str | None = None
+    model: str | None = None
+    response_kind: str = "chat"
+    input_chars: int = 0
+    output_chars: int = 0
+    completed_at: float
+
+
+def _response_metrics(
+    *,
+    started_at: float,
+    provider: str | None,
+    model: str | None,
+    user_message: str,
+    content: str,
+    first_token_at: float | None = None,
+) -> ResponseMetrics:
+    finished_at = time.perf_counter()
+    first_token_ms = None
+    if first_token_at is not None:
+        first_token_ms = max(0, int(round((first_token_at - started_at) * 1000)))
+    return ResponseMetrics(
+        duration_ms=max(0, int(round((finished_at - started_at) * 1000))),
+        first_token_ms=first_token_ms,
+        provider=(provider or None),
+        model=(model or None),
+        response_kind="code" if _looks_like_coding_request(user_message) else "chat",
+        input_chars=len(user_message or ""),
+        output_chars=len(content or ""),
+        completed_at=time.time(),
+    )
+
+
 class ChatResponse(BaseModel):
     role: str = "assistant"
     content: str
@@ -73,6 +109,7 @@ class ChatResponse(BaseModel):
     verification_level: str | None = None
     verification: dict | None = None
     web: dict | None = None
+    response_metrics: ResponseMetrics | None = None
 
 
 def _extract_web_meta(tool_results: object) -> dict | None:
@@ -894,6 +931,8 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
     """
 
     def events():
+        request_started_at = time.perf_counter()
+        first_token_at: float | None = None
         try:
             settings = _read_settings()
             provider = (getattr(settings, "chatProvider", "stub") or "stub").strip().lower()
@@ -945,12 +984,22 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                     ),
                     prompt=prompt,
                 ):
+                    if first_token_at is None and chunk:
+                        first_token_at = time.perf_counter()
                     chunks.append(chunk)
                     yield _stream_event("delta", {"content": chunk})
                 content = finalize_response_text("".join(chunks), response_mode=response_mode)
                 if not content:
                     raise HTTPException(status_code=502, detail="Ollama returned an empty response.")
-                yield _stream_event("done", {"role": "assistant", "content": content, "ts": time.time()})
+                metrics = _response_metrics(
+                    started_at=request_started_at,
+                    first_token_at=first_token_at,
+                    provider=provider,
+                    model=model,
+                    user_message=request.message,
+                    content=content,
+                )
+                yield _stream_event("done", {"role": "assistant", "content": content, "ts": time.time(), "response_metrics": metrics.model_dump()})
                 return
 
             # Compatibility fallback for OpenAI, stub, and Ollama tool mode. This is not token-streamed,
@@ -969,6 +1018,7 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
                     "verification_level": response.verification_level,
                     "verification": response.verification,
                     "web": response.web,
+                    "response_metrics": response.response_metrics.model_dump() if response.response_metrics is not None else None,
                 },
             )
         except ProviderError as exc:
@@ -982,6 +1032,7 @@ def chat_stream(request: ChatRequest, http: Request) -> StreamingResponse:
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest, http: Request) -> ChatResponse:
+    request_started_at = time.perf_counter()
     settings = _read_settings()
     provider = (getattr(settings, "chatProvider", "stub") or "stub").strip().lower()
     model = (getattr(settings, "chatModel", "stub") or "stub").strip()
@@ -1068,9 +1119,11 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             )
             for ch in (res.retrieved or ())
         ]
+        content = finalize_response_text(res.text, response_mode=response_mode)
         return ChatResponse(
-            content=finalize_response_text(res.text, response_mode=response_mode),
+            content=content,
             ts=time.time(),
+            response_metrics=_response_metrics(started_at=request_started_at, provider=provider, model=model, user_message=request.message, content=content),
             retrieved=retrieved,
             audit_tail=h.ctx.audit.tail(limit=50),
             sources=[{"title": str(s.get("title") or ""), "url": str(s.get("url") or ""), "trust": (str(s.get("trust") or "").strip() or "unknown")} for s in (res.sources or ())],
@@ -1118,7 +1171,11 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             _openai_chat_with_tools(model=model or config.openai_model, messages=messages),
             response_mode=response_mode,
         )
-        return ChatResponse(content=content, ts=time.time())
+        return ChatResponse(
+            content=content,
+            ts=time.time(),
+            response_metrics=_response_metrics(started_at=request_started_at, provider=provider, model=model, user_message=request.message, content=content),
+        )
 
     if provider == "ollama":
         thread_id = requested_thread_id or session_tracker.get_active_thread(user_id or "")
@@ -1151,7 +1208,16 @@ def chat(request: ChatRequest, http: Request) -> ChatResponse:
             content = _ollama_generate(prompt, model=model)
         if not content:
             raise HTTPException(status_code=502, detail="Ollama returned an empty response.")
-        return ChatResponse(content=finalize_response_text(content, response_mode=response_mode), ts=time.time())
+        content = finalize_response_text(content, response_mode=response_mode)
+        return ChatResponse(
+            content=content,
+            ts=time.time(),
+            response_metrics=_response_metrics(started_at=request_started_at, provider=provider, model=model, user_message=request.message, content=content),
+        )
 
     reply = finalize_response_text(f"AgentX says: {request.message}", response_mode=response_mode)
-    return ChatResponse(content=reply, ts=time.time())
+    return ChatResponse(
+        content=reply,
+        ts=time.time(),
+        response_metrics=_response_metrics(started_at=request_started_at, provider=provider, model=model, user_message=request.message, content=reply),
+    )

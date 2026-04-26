@@ -2289,3 +2289,10 @@ input[type="checkbox"] {
     justify-content: flex-start;
   }
 }
+
+.agentx-message-row__timer {
+  color: rgba(125, 211, 252, 0.82);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}

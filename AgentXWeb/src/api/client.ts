@@ -19,6 +19,17 @@ export type StatusResponse = {
   provider_error_type?: string | null;
   provider_error_message?: string | null;
 };
+export type ResponseMetrics = {
+  duration_ms: number;
+  first_token_ms?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  response_kind?: "chat" | "code" | string;
+  input_chars?: number;
+  output_chars?: number;
+  completed_at?: number;
+};
+
 export type ChatResponse = {
   role: "assistant";
   content: string;
@@ -29,6 +40,7 @@ export type ChatResponse = {
   verification_level?: string | null;
   verification?: { verdict: string; confidence: number; contradictions: string[] } | null;
   web?: { providers_used?: string[]; providers_failed?: { provider?: string; name?: string; error?: string }[]; fetch_blocked?: { url: string; reason: string }[] } | null;
+  response_metrics?: ResponseMetrics | null;
 };
 
 export type ChatStreamEvent =
@@ -202,6 +214,7 @@ export type Message = {
   role: "user" | "assistant" | "system";
   content: string;
   ts: number;
+  response_metrics?: ResponseMetrics | null;
 };
 export type Thread = {
   id: string;
@@ -665,7 +678,7 @@ export async function getThread(id: string): Promise<Thread> {
 
 export async function appendThreadMessage(
   threadId: string,
-  payload: { role: Message["role"]; content: string }
+  payload: { role: Message["role"]; content: string; response_metrics?: ResponseMetrics | null }
 ): Promise<Thread> {
   const res = await fetch(`${config.apiBase}/v1/threads/${threadId}/messages`, {
     method: "POST",

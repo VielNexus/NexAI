@@ -37,6 +37,7 @@ class ThreadCreate(BaseModel):
 class MessagePayload(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
+    response_metrics: dict | None = None
 
 
 class TitlePayload(BaseModel):
@@ -57,6 +58,7 @@ class Message(BaseModel):
     role: str
     content: str
     ts: float
+    response_metrics: dict | None = None
 
 
 class Thread(BaseModel):
@@ -229,7 +231,13 @@ def append_message(thread_id: str, payload: MessagePayload, http: Request) -> Th
 
     thread = _read_thread(thread_id, owner_id=owner_id)
     now = time.time()
-    message = Message(id=uuid.uuid4().hex, role=payload.role, content=payload.content, ts=now)
+    message = Message(
+        id=uuid.uuid4().hex,
+        role=payload.role,
+        content=payload.content,
+        ts=now,
+        response_metrics=(payload.response_metrics if payload.role == "assistant" else None),
+    )
     thread.messages.append(message)
     thread.updated_at = now
     _write_thread(thread, owner_id=owner_id)
