@@ -39,15 +39,33 @@ DEFAULT_CODING_CONTRACT = """When writing code:
 - Do not invent fake USER/ASSISTANT dialogue."""
 
 
+DEFAULT_COLLABORATIVE_REVIEWER_CONTRACT = """When reviewing/finalizing collaborative coding output:
+- Treat the original user request as the source of truth. The draft is only a starting point.
+- Return one complete final answer, not a review memo.
+- Preserve correct draft functionality while fixing bugs, gaps, bad assumptions, and weak structure.
+- Use proper fenced code blocks with the language name.
+- Remove literal labels like \"Copy code\", fake transcripts, duplicate code, and placeholder-only solutions.
+- For CLI scripts, use argparse, clear help text, and examples that can run on Windows.
+- Validate user-provided paths and inputs before doing work.
+- Handle PermissionError and OSError around file access.
+- Handle output/write errors when creating CSV, reports, or generated files.
+- Do not hardcode placeholder paths as the final solution.
+- Prefer the standard library unless the user requests dependencies.
+- If scanning files, include useful CSV/report columns when relevant: filename, full path, size_bytes, size_gb, and modified time.
+- Keep explanation short and practical after the final code."""
+
+
 class ModelBehaviorSettingsModel(BaseModel):
     enabled: bool = True
     codingContractEnabled: bool = True
+    collaborativeReviewerContractEnabled: bool = True
     requireFencedCode: bool = True
     preferStandardLibrary: bool = True
     windowsAwareExamples: bool = True
     autoRepairEnabled: bool = False
     globalInstructions: str = DEFAULT_GLOBAL_INSTRUCTIONS
     codingContract: str = DEFAULT_CODING_CONTRACT
+    collaborativeReviewerContract: str = DEFAULT_COLLABORATIVE_REVIEWER_CONTRACT
 
 
 class SettingsModel(BaseModel):

@@ -222,6 +222,16 @@ export function SettingsPage(props: Props) {
                 <span>Enable coding contract when coding intent is detected</span>
               </label>
 
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={modelBehavior.collaborativeReviewerContractEnabled}
+                  disabled={loading || !modelBehavior.enabled}
+                  onChange={(e) => updateModelBehavior({ collaborativeReviewerContractEnabled: e.target.checked })}
+                />
+                <span>Enable collaborative reviewer contract for Draft + Review</span>
+              </label>
+
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="flex items-center gap-2">
                   <input
@@ -275,6 +285,17 @@ export function SettingsPage(props: Props) {
                 value={modelBehavior.codingContract}
                 disabled={loading || !modelBehavior.enabled || !modelBehavior.codingContractEnabled}
                 onChange={(e) => updateModelBehavior({ codingContract: e.target.value })}
+              />
+
+              <label className={tokens.fieldLabel}>Collaborative Reviewer Contract</label>
+              <div className={tokens.helperText}>
+                Used only for Draft + Review. This controls how Devstral reviews Qwen's draft before the final answer.
+              </div>
+              <textarea
+                className={`${tokens.input} min-h-[260px] font-mono text-xs`}
+                value={modelBehavior.collaborativeReviewerContract}
+                disabled={loading || !modelBehavior.enabled || !modelBehavior.collaborativeReviewerContractEnabled}
+                onChange={(e) => updateModelBehavior({ collaborativeReviewerContract: e.target.value })}
               />
 
               <div className="flex flex-wrap gap-2">

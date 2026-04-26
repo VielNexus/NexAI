@@ -892,6 +892,30 @@ def _coding_output_contract() -> str:
     return "\n".join(lines)
 
 
+def _collaborative_reviewer_contract() -> str:
+    settings = _read_settings()
+    behavior = getattr(settings, "modelBehavior", None)
+    if behavior is None or not _behavior_flag(behavior, "collaborativeReviewerContractEnabled", True):
+        return ""
+    custom = _behavior_text(behavior, "collaborativeReviewerContract", "")
+    if custom:
+        return "Collaborative coding reviewer contract:\n" + custom
+    return (
+        "Collaborative coding reviewer contract:\n"
+        "- Treat the original user request as the source of truth. The draft is only a starting point.\n"
+        "- Return one complete final answer, not a review memo.\n"
+        "- Preserve correct draft functionality while fixing bugs, gaps, bad assumptions, and weak structure.\n"
+        "- Use proper fenced code blocks with the language name.\n"
+        "- Remove literal labels like 'Copy code', fake transcripts, duplicate code, and placeholder-only solutions.\n"
+        "- For CLI scripts, use argparse, clear help text, and Windows-friendly run examples.\n"
+        "- Validate user-provided paths and inputs before doing work.\n"
+        "- Handle PermissionError and OSError around file access.\n"
+        "- Handle output/write errors when creating CSV, reports, or generated files.\n"
+        "- Do not hardcode placeholder paths as the final solution.\n"
+        "- If scanning files, include useful CSV/report columns when relevant: filename, full path, size_bytes, size_gb, and modified time."
+    )
+
+
 def _model_behavior_contract(user_message: str) -> str:
     settings = _read_settings()
     behavior = getattr(settings, "modelBehavior", None)
@@ -964,11 +988,10 @@ def _collaborative_review_prompt(
             "Your job:",
             "- Verify the draft satisfies every user requirement.",
             "- Fix incorrect logic, missing imports, missing CLI handling, hardcoded placeholder paths, and incomplete output/export behavior.",
-            "- For CLI scripts, prefer argparse and validate user-provided paths/inputs.",
-            "- Handle PermissionError and OSError where file access is involved.",
             "- Preserve clean formatting and indentation.",
-            "- Remove duplicate code, fake transcript lines, or placeholder-only solutions.",
             "- Return one complete final answer with production-ready code and brief run instructions.",
+            "",
+            _collaborative_reviewer_contract(),
             "",
             f"Draft model: {draft_model}",
             f"Review/final model: {review_model}",

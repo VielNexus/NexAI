@@ -267,12 +267,14 @@ export type LayoutSettings = {
 export type ModelBehaviorSettings = {
   enabled?: boolean;
   codingContractEnabled?: boolean;
+  collaborativeReviewerContractEnabled?: boolean;
   requireFencedCode?: boolean;
   preferStandardLibrary?: boolean;
   windowsAwareExamples?: boolean;
   autoRepairEnabled?: boolean;
   globalInstructions?: string;
   codingContract?: string;
+  collaborativeReviewerContract?: string;
 };
 
 export const DEFAULT_LAYOUT_SETTINGS: Required<LayoutSettings> = {
@@ -285,6 +287,7 @@ export const DEFAULT_LAYOUT_SETTINGS: Required<LayoutSettings> = {
 export const DEFAULT_MODEL_BEHAVIOR_SETTINGS: Required<ModelBehaviorSettings> = {
   enabled: true,
   codingContractEnabled: true,
+  collaborativeReviewerContractEnabled: true,
   requireFencedCode: true,
   preferStandardLibrary: true,
   windowsAwareExamples: true,
@@ -304,6 +307,20 @@ When the user asks for a file, export, report, or script, make sure the output a
 - If the user asks for CSV/export/report/file output, the code must implement that output.
 - Include a short run example, using Windows paths when the user appears to be on Windows.
 - Do not invent fake USER/ASSISTANT dialogue.`,
+  collaborativeReviewerContract: `When reviewing/finalizing collaborative coding output:
+- Treat the original user request as the source of truth. The draft is only a starting point.
+- Return one complete final answer, not a review memo.
+- Preserve correct draft functionality while fixing bugs, gaps, bad assumptions, and weak structure.
+- Use proper fenced code blocks with the language name.
+- Remove literal labels like "Copy code", fake transcripts, duplicate code, and placeholder-only solutions.
+- For CLI scripts, use argparse, clear help text, and examples that can run on Windows.
+- Validate user-provided paths and inputs before doing work.
+- Handle PermissionError and OSError around file access.
+- Handle output/write errors when creating CSV, reports, or generated files.
+- Do not hardcode placeholder paths as the final solution.
+- Prefer the standard library unless the user requests dependencies.
+- If scanning files, include useful CSV/report columns when relevant: filename, full path, size_bytes, size_gb, and modified time.
+- Keep explanation short and practical after the final code.`,
 };
 
 export function normalizeLayoutSettings(layout?: LayoutSettings | null): Required<LayoutSettings> {
