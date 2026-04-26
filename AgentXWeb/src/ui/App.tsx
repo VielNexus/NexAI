@@ -330,6 +330,8 @@ export function App() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
+  const scrollRafRef = useRef<number | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const focusRafRef = useRef<number | null>(null);
   const [tools, setTools] = useState<ToolSchema[] | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
@@ -1085,23 +1087,64 @@ ${script.content}
     };
   }, [appSettings, handleSettingsSaved, pendingLayoutSync, sessionReady, statusOk]);
 
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = feedRef.current;
+    if (!el || typeof window === "undefined") return;
+
+    if (scrollRafRef.current !== null) {
+      window.cancelAnimationFrame(scrollRafRef.current);
+    }
+
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const target = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTo({ top: target, behavior });
+      nearBottomRef.current = true;
+      setShowJumpToLatest(false);
+    });
+  }, []);
+
+  const resumeAutoScroll = useCallback((behavior: ScrollBehavior = "smooth") => {
+    nearBottomRef.current = true;
+    setShowJumpToLatest(false);
+    scrollToLatest(behavior);
+  }, [scrollToLatest]);
+
   const onFeedScroll = useCallback(() => {
     const el = feedRef.current;
     if (!el) return;
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
-    nearBottomRef.current = remaining <= 120;
+    const isNearBottom = remaining <= 160;
+    nearBottomRef.current = isNearBottom;
+    setShowJumpToLatest(!isNearBottom);
   }, []);
 
-  const scrollToBottomIfNear = useCallback(() => {
-    const el = feedRef.current;
-    if (!el) return;
-    if (!nearBottomRef.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, []);
+  const latestMessageScrollKey = useMemo(() => {
+    const messages = activeThread?.messages ?? [];
+    const last = messages[messages.length - 1];
+    return [
+      activeView,
+      activeThread?.id ?? "none",
+      messages.length,
+      last?.id ?? "none",
+      last?.content?.length ?? 0,
+      sending ? "sending" : "idle",
+    ].join(":");
+  }, [activeThread?.id, activeThread?.messages, activeView, sending]);
 
   useEffect(() => {
-    scrollToBottomIfNear();
-  }, [activeThread?.messages.length, scrollToBottomIfNear]);
+    if (activeView !== "chat") return;
+    if (!nearBottomRef.current) return;
+    scrollToLatest("auto");
+  }, [latestMessageScrollKey, activeView, scrollToLatest]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (activeView !== "chat") return;
@@ -1162,6 +1205,7 @@ ${script.content}
     scheduleComposerFocus({ force: true });
 
     const localUser = { id: createClientId("message"), role: "user" as const, content: text, ts: Date.now() / 1000 };
+    resumeAutoScroll("auto");
     setActiveThread((prev) => (prev ? { ...prev, messages: [...prev.messages, localUser] } : prev));
 
     setSending(true);
@@ -1195,6 +1239,7 @@ ${script.content}
         ts: Date.now() / 1000,
       };
       setActiveThread((prev) => (prev ? { ...prev, messages: [...prev.messages, localAssistant] } : prev));
+      resumeAutoScroll("auto");
 
       let streamedContent = "";
       const reply = await streamChatMessage({
@@ -1309,6 +1354,7 @@ ${script.content}
     modelOptions.ollama,
     layoutSettings.showCodeCanvas,
     openCodeCanvasFromReply,
+    resumeAutoScroll,
     saveGeneratedScript,
     scheduleComposerFocus,
     sending,
@@ -2234,6 +2280,15 @@ ${script.content}
                       </div>
                     </div>
                   )}
+                  {showJumpToLatest ? (
+                    <button
+                      type="button"
+                      className="agentx-jump-latest"
+                      onClick={() => resumeAutoScroll("smooth")}
+                    >
+                      ↓ Jump to latest
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className={theme.shell.composer}>
