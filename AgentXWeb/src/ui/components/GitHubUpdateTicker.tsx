@@ -1,125 +1,94 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { config } from "../../config";
-
-type CommitResponse = {
-  sha?: string;
-  html_url?: string;
-  commit?: {
-    message?: string;
-    author?: { date?: string | null } | null;
-  };
+type GitHubStatus = {
+  ok?: boolean;
+  status?: string;
+  up_to_date?: boolean;
+  current_commit?: string;
+  local_commit?: string;
+  remote_commit?: string;
+  latest_commit?: string;
+  current_message?: string;
+  latest_message?: string;
+  branch?: string;
+  checked_at?: string;
+  local_version?: string;
+  version?: string;
+  error?: string | null;
 };
 
-type UpdateState =
-  | { status: "disabled" }
-  | { status: "checking" }
-  | { status: "error"; message: string }
-  | { status: "current" | "update"; sha: string; message: string; date: string | null; url: string | null };
-
-function shortSha(value: string | null | undefined): string {
-  const clean = String(value ?? "").trim();
-  return clean ? clean.slice(0, 7) : "unknown";
+function shortSha(value?: string | null): string {
+  if (!value) return "unknown";
+  return value.length > 8 ? value.slice(0, 8) : value;
 }
 
-function formatCommitDate(value: string | null | undefined): string {
-  if (!value) return "date unknown";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "date unknown";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
+function statusText(state: GitHubStatus | null): string {
+  if (!state) return "Checking GitHub status...";
+  if (state.error) return `GitHub status unavailable - ${state.error}`;
 
-function trimCommitMessage(value: string | null | undefined): string {
-  const firstLine = String(value ?? "").split("\n")[0]?.trim() ?? "";
-  if (!firstLine) return "Latest GitHub commit";
-  return firstLine.length > 92 ? `${firstLine.slice(0, 89)}...` : firstLine;
+  const local = state.local_commit || state.current_commit;
+  const remote = state.remote_commit || state.latest_commit;
+  const msg = state.latest_message || state.current_message || "";
+  const version = state.local_version || state.version || "";
+
+  const upToDate =
+    state.up_to_date === true ||
+    state.status === "up_to_date" ||
+    state.status === "current" ||
+    state.status === "clean";
+
+  const prefix = upToDate ? "GitHub latest" : "GitHub update available";
+  const sha = shortSha(remote || local);
+  const branch = state.branch ? ` on ${state.branch}` : "";
+  const versionText = version ? `    Local: ${version}` : "";
+
+  return `${prefix}${branch} - ${sha}${msg ? ` - ${msg}` : ""}${versionText}`;
 }
 
 export function GitHubUpdateTicker() {
-  const { enabled, repo, branch, currentSha, currentVersion } = config.updateFeed;
-  const [state, setState] = useState<UpdateState>(() => (enabled ? { status: "checking" } : { status: "disabled" }));
+  const [state, setState] = useState<GitHubStatus | null>(null);
 
   useEffect(() => {
-    if (!enabled || !repo) {
-      setState({ status: "disabled" });
-      return;
-    }
+    let cancelled = false;
 
-    const controller = new AbortController();
-    const url = `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(branch || "main")}`;
-
-    async function checkForUpdates() {
-      setState({ status: "checking" });
+    async function load() {
       try {
-        const res = await fetch(url, {
-          headers: { Accept: "application/vnd.github+json" },
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
-        const data = (await res.json()) as CommitResponse;
-        const latestSha = String(data.sha ?? "").trim();
-        const latestMessage = trimCommitMessage(data.commit?.message);
-        const latestDate = data.commit?.author?.date ?? null;
-        const latestUrl = data.html_url ?? null;
-        const current = String(currentSha ?? "").trim().toLowerCase();
-        const latest = latestSha.toLowerCase();
-        const hasUpdate = Boolean(current && latest && !latest.startsWith(current) && !current.startsWith(latest));
-        setState({
-          status: hasUpdate ? "update" : "current",
-          sha: latestSha,
-          message: latestMessage,
-          date: latestDate,
-          url: latestUrl,
-        });
+        const apiBase = `${window.location.protocol}//${window.location.hostname}:8000`;
+        const res = await fetch(`${apiBase}/v1/github/status`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GitHubStatus;
+        if (!cancelled) setState(json);
       } catch (err) {
-        if (controller.signal.aborted) return;
-        setState({ status: "error", message: err instanceof Error ? err.message : "Unable to check GitHub" });
+        if (!cancelled) {
+          setState({
+            ok: false,
+            error: err instanceof Error ? err.message : "request failed",
+          });
+        }
       }
     }
 
-    void checkForUpdates();
-    const timer = window.setInterval(() => void checkForUpdates(), 15 * 60 * 1000);
+    load();
+    const timer = window.setInterval(load, 60_000);
+
     return () => {
-      controller.abort();
+      cancelled = true;
       window.clearInterval(timer);
     };
-  }, [branch, currentSha, enabled, repo]);
+  }, []);
 
-  const label = useMemo(() => {
-    if (state.status === "disabled") return null;
-    if (state.status === "checking") return "Checking GitHub for updates...";
-    if (state.status === "error") return `GitHub update check unavailable: ${state.message}`;
-    const prefix = state.status === "update" ? "New GitHub update available" : "GitHub latest";
-    return `${prefix} - ${shortSha(state.sha)} - ${state.message} - ${formatCommitDate(state.date)}`;
-  }, [state]);
-
-  if (!label) return null;
-
-  const content = (
-    <>
-      <span className="agentx-update-ticker__badge">{state.status === "update" ? "Update" : state.status === "error" ? "Notice" : "GitHub"}</span>
-      <span className="agentx-update-ticker__text">{label}</span>
-      <span className="agentx-update-ticker__version">Local: {currentVersion || "local"}{currentSha ? ` @ ${shortSha(currentSha)}` : ""}</span>
-    </>
-  );
-
-  const href = state.status === "current" || state.status === "update" ? state.url ?? `https://github.com/${repo}` : null;
+  const isUpdate =
+    state?.up_to_date === false ||
+    state?.status === "behind" ||
+    state?.status === "update" ||
+    state?.status === "update_available";
 
   return (
-    <div className={["agentx-update-ticker", `agentx-update-ticker--${state.status}`].join(" ")} role="status" aria-live="polite">
-      <div className="agentx-update-ticker__track">
-        {href ? (
-          <a className="agentx-update-ticker__inner" href={href} target="_blank" rel="noreferrer">{content}</a>
-        ) : (
-          <div className="agentx-update-ticker__inner">{content}</div>
-        )}
-        <div className="agentx-update-ticker__inner agentx-update-ticker__inner--ghost" aria-hidden="true">{content}</div>
-      </div>
+    <div className="github-update-strip" role="status" aria-live="polite">
+      <span className={isUpdate ? "github-pill github-pill-warn" : "github-pill"}>
+        GITHUB
+      </span>
+      <span className="github-update-text">{statusText(state)}</span>
     </div>
   );
 }

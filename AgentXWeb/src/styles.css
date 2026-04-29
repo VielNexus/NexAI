@@ -1134,7 +1134,11 @@ button {
 }
 
 .agentx-dropdown__option {
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.agentx-update-ticker__inner:hover {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .agentx-dropdown__trigger:hover:not(:disabled) {
@@ -2575,30 +2579,17 @@ body {
   box-shadow: 0 0 28px rgba(34, 211, 238, 0.12);
 }
 
-.agentx-update-ticker__track {
-  display: flex;
-  width: max-content;
-  min-width: 100%;
-  animation: agentx-update-scroll 26s linear infinite;
-}
-
-.agentx-update-ticker:hover .agentx-update-ticker__track {
-  animation-play-state: paused;
-}
-
 .agentx-update-ticker__inner {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.85rem;
-  min-width: max-content;
+  min-width: 0;
+  width: 100%;
+  flex-wrap: wrap;
   padding: 0.48rem 1.05rem;
   color: inherit;
   text-decoration: none;
   white-space: nowrap;
-}
-
-.agentx-update-ticker__inner--ghost {
-  opacity: 0.8;
 }
 
 .agentx-update-ticker__badge {
@@ -2626,17 +2617,6 @@ body {
 .agentx-update-ticker__version {
   color: rgba(148, 163, 184, 0.72);
   font-size: 0.72rem;
-}
-
-@keyframes agentx-update-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agentx-update-ticker__track {
-    animation: none;
-  }
 }
 
 
@@ -2705,4 +2685,240 @@ body {
   font-weight: 800;
   letter-spacing: 0.04em;
   backdrop-filter: blur(8px);
+}
+
+
+.agentx-draft-workspace {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  background: rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(6px);
+}
+
+.agentx-draft-workspace__panel {
+  width: min(920px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-left: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+  color: #e5e7eb;
+  box-shadow: -24px 0 70px rgba(2, 6, 23, 0.36);
+}
+
+.agentx-draft-workspace__header,
+.agentx-draft-workspace__footer,
+.agentx-draft-workspace__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.agentx-draft-workspace__eyebrow {
+  color: #67e8f9;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.agentx-draft-workspace__header h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 850;
+}
+
+.agentx-draft-workspace__header p {
+  margin: 0.25rem 0 0;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.agentx-draft-workspace__body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding-right: 0.2rem;
+}
+
+.agentx-draft-workspace__body section {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 1.25rem;
+  background: rgba(15, 23, 42, 0.68);
+  padding: 1rem;
+}
+
+.agentx-draft-workspace__body h3 {
+  margin: 0 0 0.7rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.agentx-draft-workspace__section-head h3 {
+  margin: 0;
+}
+
+.agentx-draft-workspace__section-head button {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #cbd5e1;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.agentx-draft-workspace__section-head button:hover {
+  border-color: rgba(34, 211, 238, 0.62);
+  color: #ecfeff;
+}
+
+.agentx-draft-workspace pre {
+  margin: 0.7rem 0 0;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 1rem;
+  background: rgba(2, 6, 23, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 0.9rem;
+  color: #dbeafe;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.agentx-draft-workspace__text {
+  white-space: pre-wrap;
+  color: #d1d5db;
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+
+.agentx-draft-workspace ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #d1d5db;
+  line-height: 1.55;
+}
+
+.agentx-draft-workspace__loading,
+.agentx-draft-workspace__error {
+  border-radius: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.agentx-draft-workspace__error {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.42);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.agentx-draft-workspace__footer {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: 1rem;
+  justify-content: flex-end;
+}
+
+@media (max-width: 860px) {
+  .agentx-draft-workspace__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agentx-status-dot {
+  display: inline-block;
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+}
+
+.agentx-status-dot--ok {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16), 0 0 18px rgba(34, 197, 94, 0.25);
+}
+
+.agentx-status-dot--bad {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16), 0 0 18px rgba(239, 68, 68, 0.25);
+}
+
+.agentx-model-update-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(34, 211, 238, 0.16);
+  background: rgba(15, 23, 42, 0.44);
+  color: rgba(226, 232, 240, 0.92);
+  padding: 0.65rem 0.75rem;
+  text-decoration: none;
+}
+
+.agentx-model-update-card:hover {
+  border-color: rgba(34, 211, 238, 0.38);
+  background: rgba(8, 145, 178, 0.14);
+}
+
+.agentx-model-update-card span {
+  font-weight: 800;
+}
+
+.agentx-model-update-card small {
+  color: rgba(148, 163, 184, 0.78);
+  font-size: 0.72rem;
+}
+
+.github-update-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  padding: 8px 18px;
+  border-top: 1px solid rgba(100, 180, 255, 0.08);
+  border-bottom: 1px solid rgba(100, 180, 255, 0.10);
+  background: rgba(4, 13, 28, 0.72);
+  color: rgba(230, 242, 255, 0.86);
+  overflow: hidden;
+}
+
+.github-pill {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(73, 196, 255, 0.45);
+  background: rgba(73, 196, 255, 0.14);
+  color: rgba(180, 235, 255, 0.96);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.github-pill-warn {
+  border-color: rgba(255, 188, 87, 0.55);
+  background: rgba(255, 188, 87, 0.14);
+  color: rgba(255, 223, 166, 0.96);
+}
+
+.github-update-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 650;
 }

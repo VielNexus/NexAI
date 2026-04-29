@@ -6,6 +6,7 @@ import {
   appendThreadMessage,
   createThread,
   getToolsSchema,
+  generateDraft,
   getSettings,
   getStatus,
   getStatusRefresh,
@@ -35,6 +36,8 @@ import {
   type ProviderErrorDetail,
   type AgentXSettings,
   type CodingPipelineRequest,
+  type DraftGenerateResponse,
+  type DraftMode,
 } from "../api/client";
 import { config } from "../config";
 import { Panel } from "./components/Panel";
@@ -360,6 +363,63 @@ type ComposerAttachment = {
 };
 
 type ComposerRagMode = "auto" | "strict" | "off";
+
+type DraftWorkspaceState = {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  mode: DraftMode;
+  data: DraftGenerateResponse | null;
+};
+
+function emptyDraftWorkspace(): DraftWorkspaceState {
+  return { open: false, loading: false, error: null, mode: "explain_and_rewrite", data: null };
+}
+
+function languageFromName(name: string | null | undefined): string {
+  const filename = String(name ?? "").toLowerCase();
+  const ext = filename.includes(".") ? filename.split(".").pop() || "" : "";
+  const map: Record<string, string> = {
+    py: "python",
+    lua: "lua",
+    js: "javascript",
+    ts: "typescript",
+    html: "html",
+    htm: "html",
+    css: "css",
+    xml: "xml",
+    php: "php",
+    java: "java",
+    json: "json",
+    yaml: "yaml",
+    yml: "yaml",
+    md: "markdown",
+    sql: "sql",
+    sh: "bash",
+  };
+  return map[ext] || "text";
+}
+
+function detectDraftLanguage(content: string, filename?: string | null): string {
+  const byName = languageFromName(filename);
+  if (byName !== "text") return byName;
+  const sample = content.trimStart().slice(0, 500).toLowerCase();
+  if (sample.startsWith("<?php")) return "php";
+  if (sample.startsWith("<!doctype html") || sample.includes("<html")) return "html";
+  if (sample.startsWith("<?xml")) return "xml";
+  if (sample.includes("npchandler") || sample.includes("function oncreature")) return "lua";
+  return "text";
+}
+
+function composerDraftSource(draftText: string, attachments: ComposerAttachment[]): { content: string; filename: string | null; language: string } {
+  const textAttachment = attachments.find((item) => item.kind === "file" && String(item.content || "").trim());
+  if (textAttachment) {
+    const content = String(textAttachment.content || "").trim();
+    return { content, filename: textAttachment.name, language: detectDraftLanguage(content, textAttachment.name) };
+  }
+  const content = draftText.trim();
+  return { content, filename: null, language: detectDraftLanguage(content, null) };
+}
 const MESSAGE_FEEDBACK_KEY = "agentxweb.messageFeedback.v1";
 
 function loadMessageFeedback(): MessageFeedbackMap {
@@ -464,12 +524,15 @@ export function App() {
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([]);
   const [composerRagMode, setComposerRagMode] = useState<ComposerRagMode>("auto");
+  const [draftWorkspace, setDraftWorkspace] = useState<DraftWorkspaceState>(() => emptyDraftWorkspace());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
+  const lastAutoScrolledKeyRef = useRef<string | null>(null);
+  const lastThreadForScrollRef = useRef<string | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const focusRafRef = useRef<number | null>(null);
   const [tools, setTools] = useState<ToolSchema[] | null>(null);
@@ -1275,9 +1338,19 @@ ${script.content}
 
   useEffect(() => {
     if (activeView !== "chat") return;
+    if (lastThreadForScrollRef.current !== (activeThread?.id ?? null)) {
+      lastThreadForScrollRef.current = activeThread?.id ?? null;
+      nearBottomRef.current = true;
+      setShowJumpToLatest(false);
+      lastAutoScrolledKeyRef.current = latestMessageScrollKey;
+      scrollToLatest("auto");
+      return;
+    }
     if (!nearBottomRef.current) return;
-    scrollToLatest("auto");
-  }, [latestMessageScrollKey, activeView, scrollToLatest]);
+    if (lastAutoScrolledKeyRef.current === latestMessageScrollKey) return;
+    lastAutoScrolledKeyRef.current = latestMessageScrollKey;
+    scrollToLatest(sending ? "auto" : "smooth");
+  }, [activeThread?.id, latestMessageScrollKey, activeView, scrollToLatest, sending]);
 
   useEffect(() => {
     return () => {
@@ -1328,6 +1401,78 @@ ${script.content}
     setComposerMenuOpen(false);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
+
+  const openDraftWorkspace = useCallback(async (mode: DraftMode) => {
+    const source = composerDraftSource(draft, composerAttachments);
+    if (!source.content.trim()) {
+      setSystemMessage("Add text/code to the composer or attach a readable file before opening Draft Workspace.");
+      setComposerMenuOpen(false);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
+    }
+    setComposerMenuOpen(false);
+    setDraftWorkspace({ open: true, loading: true, error: null, mode, data: null });
+    try {
+      const data = await generateDraft({ mode, filename: source.filename, language: source.language, content: source.content });
+      setDraftWorkspace({ open: true, loading: false, error: null, mode, data });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setDraftWorkspace({ open: true, loading: false, error: message, mode, data: null });
+    }
+  }, [composerAttachments, draft, setSystemMessage]);
+
+  const closeDraftWorkspace = useCallback(() => {
+    setDraftWorkspace((prev) => ({ ...prev, open: false, loading: false }));
+  }, []);
+
+  const copyDraftSection = useCallback(async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value || "");
+      setSystemMessage(`${label} copied to clipboard.`);
+    } catch {
+      setSystemMessage(`Could not copy ${label.toLowerCase()} to clipboard.`);
+    }
+  }, [setSystemMessage]);
+
+  const sendDraftToChat = useCallback(() => {
+    const data = draftWorkspace.data;
+    if (!data) return;
+    const content = [
+      `Draft: ${data.title}`,
+      "",
+      data.explanation ? `Explanation:\n${data.explanation}` : "",
+      data.improved ? `Improved version:\n\`\`\`${data.language}\n${data.improved}\n\`\`\`` : "",
+      data.notes?.length ? `Notes:\n${data.notes.map((note) => `- ${note}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n\n");
+    setDraft(content);
+    closeDraftWorkspace();
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [closeDraftWorkspace, draftWorkspace.data]);
+
+  const saveDraftAsScript = useCallback(async () => {
+    const data = draftWorkspace.data;
+    if (!data) return;
+    const content = data.improved?.trim() || data.original;
+    try {
+      const script = await createScript({
+        title: data.title || "Draft Workspace Script",
+        language: data.language || "text",
+        content,
+        tags: ["draft-workspace"],
+        thread_id: activeThread?.id ?? null,
+        model_provider: data.model_provider ?? chatProvider,
+        model_name: data.model_name ?? chatModel,
+      });
+      setScripts((prev) => [script, ...prev.filter((item) => item.id !== script.id)]);
+      setActiveScriptId(script.id);
+      setActiveView("scripts");
+      setSystemMessage("Draft saved to Scripts.");
+      closeDraftWorkspace();
+    } catch (err) {
+      setSystemMessage(err instanceof Error ? err.message : String(err));
+    }
+  }, [activeThread?.id, chatModel, chatProvider, closeDraftWorkspace, draftWorkspace.data, setSystemMessage]);
+
 
   const send = useCallback(async (
     overrideText?: string,
@@ -2615,6 +2760,10 @@ ${script.content}
                           <button type="button" onClick={() => fileInputRef.current?.click()}>Attach file</button>
                           <button type="button" onClick={() => imageInputRef.current?.click()}>Attach picture</button>
                           <button type="button" onClick={insertFileSearchPrompt}>Search for a file</button>
+                          <button type="button" onClick={() => void openDraftWorkspace("open")}>Open as Draft</button>
+                          <button type="button" onClick={() => void openDraftWorkspace("explain")}>Explain as Draft</button>
+                          <button type="button" onClick={() => void openDraftWorkspace("rewrite")}>Rewrite as Draft</button>
+                          <button type="button" onClick={() => void openDraftWorkspace("explain_and_rewrite")}>Explain + Rewrite Draft</button>
                           <button type="button" onClick={() => setComposerRagMode((mode) => mode === "strict" ? "auto" : "strict")}>RAG: {composerRagMode === "strict" ? "Strict" : "Auto"}</button>
                           <button type="button" onClick={() => setComposerRagMode((mode) => mode === "off" ? "auto" : "off")}>Local RAG: {composerRagMode === "off" ? "Off" : "On"}</button>
                         </div>
@@ -2739,6 +2888,49 @@ ${script.content}
           />
         ) : null}
       </div>
+
+      {draftWorkspace.open ? (
+        <div className="agentx-draft-workspace" role="dialog" aria-modal="true" aria-label="Draft Workspace">
+          <div className="agentx-draft-workspace__panel">
+            <div className="agentx-draft-workspace__header">
+              <div>
+                <div className="agentx-draft-workspace__eyebrow">Draft Workspace</div>
+                <h2>{draftWorkspace.data?.title || "Preparing draft..."}</h2>
+                <p>{draftWorkspace.data ? `${draftWorkspace.data.language} • ${draftWorkspace.data.model_provider || "local"}${draftWorkspace.data.model_name ? `:${draftWorkspace.data.model_name}` : ""}` : `Mode: ${draftWorkspace.mode}`}</p>
+              </div>
+              <button type="button" className={tokens.buttonSecondary} onClick={closeDraftWorkspace}>Close</button>
+            </div>
+            {draftWorkspace.loading ? (
+              <div className="agentx-draft-workspace__loading">Generating draft...</div>
+            ) : draftWorkspace.error ? (
+              <div className="agentx-draft-workspace__error">{draftWorkspace.error}</div>
+            ) : draftWorkspace.data ? (
+              <div className="agentx-draft-workspace__body">
+                <section>
+                  <div className="agentx-draft-workspace__section-head"><h3>Original</h3><button type="button" onClick={() => void copyDraftSection(draftWorkspace.data?.original || "", "Original")}>Copy</button></div>
+                  <pre>{draftWorkspace.data.original}</pre>
+                </section>
+                <section>
+                  <div className="agentx-draft-workspace__section-head"><h3>Explanation</h3><button type="button" onClick={() => void copyDraftSection(draftWorkspace.data?.explanation || "", "Explanation")}>Copy</button></div>
+                  <div className="agentx-draft-workspace__text">{draftWorkspace.data.explanation || "No explanation generated."}</div>
+                </section>
+                <section>
+                  <div className="agentx-draft-workspace__section-head"><h3>Improved Version</h3><button type="button" onClick={() => void copyDraftSection(draftWorkspace.data?.improved || "", "Improved version")}>Copy</button></div>
+                  <pre>{draftWorkspace.data.improved || "No rewrite generated for this mode."}</pre>
+                </section>
+                <section>
+                  <h3>Notes</h3>
+                  <ul>{(draftWorkspace.data.notes || []).map((note, idx) => <li key={`${idx}-${note}`}>{note}</li>)}</ul>
+                </section>
+              </div>
+            ) : null}
+            <div className="agentx-draft-workspace__footer">
+              <button type="button" className={tokens.buttonSecondary} onClick={sendDraftToChat} disabled={!draftWorkspace.data}>Send to Chat</button>
+              <button type="button" className={tokens.button} onClick={() => void saveDraftAsScript()} disabled={!draftWorkspace.data}>Save as Script</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <AgentXVersionBadge />
     </div>
   );

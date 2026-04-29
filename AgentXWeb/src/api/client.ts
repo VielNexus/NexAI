@@ -214,6 +214,67 @@ export type ToolsSchemaResponse = {
   tools: ToolSchema[];
 };
 
+
+export type DraftMode = "open" | "explain" | "rewrite" | "explain_and_rewrite";
+
+export type DraftGenerateRequest = {
+  mode: DraftMode;
+  filename?: string | null;
+  language?: string | null;
+  content: string;
+};
+
+export type DraftGenerateResponse = {
+  title: string;
+  language: string;
+  original: string;
+  explanation: string;
+  improved: string;
+  notes: string[];
+  model_provider?: string | null;
+  model_name?: string | null;
+  generated_at: number;
+};
+
+export type GitHubStatusResponse = {
+  ok: boolean;
+  repo_exists: boolean;
+  branch?: string | null;
+  local_commit?: string | null;
+  remote_commit?: string | null;
+  remote_ref?: string | null;
+  is_up_to_date: boolean;
+  dirty: boolean;
+  ahead: number;
+  behind: number;
+  message?: string | null;
+  checked_at: number;
+};
+
+export type GitHubUpdateResponse = {
+  ok: boolean;
+  backup_path?: string | null;
+  before: GitHubStatusResponse;
+  after?: GitHubStatusResponse | null;
+  output: string;
+  message: string;
+};
+
+export type OllamaModelUpdate = {
+  name: string;
+  url: string;
+  description?: string | null;
+};
+
+export type OllamaModelUpdatesResponse = {
+  ok: boolean;
+  source: string;
+  fetched_at: number;
+  cached: boolean;
+  models: OllamaModelUpdate[];
+  error?: string | null;
+};
+
 export type WebPolicyResponse = {
   ok: boolean;
   ts: number;
@@ -304,6 +365,7 @@ export type ScriptRecord = {
   model_name?: string | null;
   source_thread_id?: string | null;
   source_message_id?: string | null;
+  thread_id?: string | null;
   created_at: number;
   updated_at: number;
   tags: string[];
@@ -772,6 +834,15 @@ export async function streamChatMessage(
   return finalResponse;
 }
 
+export async function generateDraft(payload: DraftGenerateRequest): Promise<DraftGenerateResponse> {
+  const res = await fetch(`${config.apiBase}/v1/drafts/generate`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function getCapabilities(): Promise<CapabilitiesResponse> {
   const res = await fetch(`${config.apiBase}/v1/capabilities`, { headers: authHeaders() });
   return handle(res);
@@ -1011,6 +1082,7 @@ export async function createScript(payload: {
   model_name?: string | null;
   source_thread_id?: string | null;
   source_message_id?: string | null;
+  thread_id?: string | null;
   tags?: string[];
 }): Promise<ScriptRecord> {
   const res = await fetch(`${config.apiBase}/v1/scripts`, {
@@ -1060,5 +1132,26 @@ export async function disableUnsafeMode(threadId: string, reason?: string): Prom
     headers: jsonHeaders(),
     body: JSON.stringify({ reason: reason ?? null }),
   });
+  return handle(res);
+}
+
+export async function getGitHubStatus(fetchRemote = true): Promise<GitHubStatusResponse> {
+  const qs = fetchRemote ? "?fetch=true" : "?fetch=false";
+  const res = await fetch(`${config.apiBase}/v1/github/status${qs}`, { headers: authHeaders() });
+  return handle(res);
+}
+
+export async function updateFromGitHub(payload: { remote?: string; branch?: string | null } = {}): Promise<GitHubUpdateResponse> {
+  const res = await fetch(`${config.apiBase}/v1/github/update`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getOllamaModelUpdates(refresh = false): Promise<OllamaModelUpdatesResponse> {
+  const qs = refresh ? "?refresh=true" : "";
+  const res = await fetch(`${config.apiBase}/v1/ollama/model-updates${qs}`, { headers: authHeaders() });
   return handle(res);
 }

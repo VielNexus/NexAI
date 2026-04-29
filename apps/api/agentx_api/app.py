@@ -19,9 +19,12 @@ from agentx_api.auth import require_api_auth
 from agentx_api.routes.auth import router as auth_router
 from agentx_api.config import config
 from agentx_api.routes.chat import router as chat_router
+from agentx_api.routes.drafts import router as drafts_router
 from agentx_api.routes.projects import router as projects_router
 from agentx_api.routes.scripts import router as scripts_router
 from agentx_api.routes.fs import router as fs_router
+from agentx_api.routes.github import router as github_router
+from agentx_api.routes.ollama_updates import router as ollama_updates_router
 from agentx_api.routes.rag import router as rag_router
 from agentx_api.routes.agentx import router as agentx_router
 from agentx_api.routes.settings import router as settings_router
@@ -94,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(status_router, prefix="/v1")
     app.include_router(auth_router, prefix="/v1")
     app.include_router(chat_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
+    app.include_router(drafts_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(settings_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(threads_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(projects_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
@@ -102,6 +106,8 @@ def create_app() -> FastAPI:
     app.include_router(rag_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(fs_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(agentx_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
+    app.include_router(github_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
+    app.include_router(ollama_updates_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     return app
 
 

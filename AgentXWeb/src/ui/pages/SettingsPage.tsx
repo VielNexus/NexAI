@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { DEFAULT_AGENTX_SETTINGS, DEFAULT_MODEL_BEHAVIOR_SETTINGS, normalizeModelBehaviorSettings, saveSettings, type AgentXSettings, type StatusResponse } from "../../api/client";
+import { DEFAULT_AGENTX_SETTINGS, DEFAULT_MODEL_BEHAVIOR_SETTINGS, getGitHubStatus, getOllamaModelUpdates, normalizeModelBehaviorSettings, saveSettings, updateFromGitHub, type AgentXSettings, type GitHubStatusResponse, type OllamaModelUpdatesResponse, type StatusResponse } from "../../api/client";
 import { config } from "../../config";
 import { Panel } from "../components/Panel";
 import { AgentXDropdown, type AgentXDropdownOption } from "../components/AgentXDropdown";
 import { ScrollArea } from "../components/ScrollArea";
 import { tokens } from "../tokens";
+
+
+const apiBaseUrl = () => `${window.location.protocol}//${window.location.hostname}:8000`;
 
 type Props = {
   statusOk: boolean;
@@ -18,6 +21,11 @@ export function SettingsPage(props: Props) {
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<AgentXSettings>(DEFAULT_AGENTX_SETTINGS);
   const [error, setError] = useState<string | null>(null);
+  const [githubStatus, setGithubStatus] = useState<GitHubStatusResponse | null>(null);
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [githubMessage, setGithubMessage] = useState<string | null>(null);
+  const [ollamaUpdates, setOllamaUpdates] = useState<OllamaModelUpdatesResponse | null>(null);
+  const [ollamaUpdatesBusy, setOllamaUpdatesBusy] = useState(false);
 
   const rawProvider = (settings?.chatProvider ?? props.status.chat_provider ?? "ollama").toString().toLowerCase();
   const provider = rawProvider === "openai" || rawProvider === "ollama" ? rawProvider : "ollama";
@@ -88,6 +96,59 @@ export function SettingsPage(props: Props) {
     }));
   };
 
+  const refreshGithubStatus = async () => {
+    if (!props.statusOk) return;
+    setGithubBusy(true);
+    setGithubMessage(null);
+    try {
+      const status = await getGitHubStatus(true);
+      setGithubStatus(status);
+    } catch (e) {
+      setGithubMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGithubBusy(false);
+    }
+  };
+
+  const runGithubUpdate = async () => {
+    if (!props.statusOk) {
+      props.onSystemMessage("Offline - cannot update from GitHub.");
+      return;
+    }
+    setGithubBusy(true);
+    setGithubMessage(null);
+    try {
+      const result = await updateFromGitHub({ branch: githubStatus?.branch ?? undefined });
+      setGithubStatus(result.after ?? result.before);
+      setGithubMessage(result.message + (result.backup_path ? ` Backup: ${result.backup_path}` : ""));
+      props.onSystemMessage(result.ok ? "GitHub update completed. Restarting services may be needed." : result.message);
+    } catch (e) {
+      setGithubMessage(e instanceof Error ? e.message : String(e));
+      props.onSystemMessage("GitHub update failed.");
+    } finally {
+      setGithubBusy(false);
+    }
+  };
+
+  const refreshOllamaUpdates = async (refresh = false) => {
+    if (!props.statusOk) return;
+    setOllamaUpdatesBusy(true);
+    try {
+      setOllamaUpdates(await getOllamaModelUpdates(refresh));
+    } catch (e) {
+      setOllamaUpdates({ ok: false, source: "https://ollama.com/search", fetched_at: Date.now() / 1000, cached: false, models: [], error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setOllamaUpdatesBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!props.statusOk) return;
+    void refreshGithubStatus();
+    void refreshOllamaUpdates(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.statusOk]);
+
   const save = async (next: AgentXSettings) => {
     if (!props.statusOk) {
       props.onSystemMessage("Offline - cannot save settings.");
@@ -130,6 +191,50 @@ export function SettingsPage(props: Props) {
             </div>
           </Panel>
 
+
+          <Panel className="p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={tokens.smallLabel}>GitHub Status</div>
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-200">
+                  <span className={githubStatus?.is_up_to_date ? "agentx-status-dot agentx-status-dot--ok" : "agentx-status-dot agentx-status-dot--bad"} aria-hidden="true" />
+                  <span>{githubBusy ? "Checking..." : githubStatus?.message || "Not checked yet"}</span>
+                </div>
+                <div className={tokens.helperText}>
+                  {githubStatus?.branch ? `Branch: ${githubStatus.branch}` : "Checks the local checkout against GitHub."}
+                  {githubStatus?.local_commit ? ` • Local: ${githubStatus.local_commit.slice(0, 7)}` : ""}
+                  {githubStatus?.remote_commit ? ` • Remote: ${githubStatus.remote_commit.slice(0, 7)}` : ""}
+                </div>
+                {githubMessage ? <div className={tokens.helperText}>{githubMessage}</div> : null}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" className={tokens.buttonSecondary} disabled={githubBusy || !props.statusOk} onClick={() => void refreshGithubStatus()}>Refresh</button>
+                {!githubStatus?.is_up_to_date ? (
+                  <button type="button" className={tokens.button} disabled={githubBusy || !props.statusOk} onClick={() => void runGithubUpdate()}>Update</button>
+                ) : null}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel className="p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={tokens.smallLabel}>Ollama Model Updates</div>
+                <div className={tokens.helperText}>Recent model links from Ollama. Cached locally so AgentX does not hammer Ollama.</div>
+              </div>
+              <button type="button" className={tokens.buttonSecondary} disabled={ollamaUpdatesBusy || !props.statusOk} onClick={() => void refreshOllamaUpdates(true)}>{ollamaUpdatesBusy ? "Refreshing..." : "Refresh"}</button>
+            </div>
+            {ollamaUpdates?.error ? <div className="mt-2 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">{ollamaUpdates.error}</div> : null}
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {(ollamaUpdates?.models ?? []).slice(0, 8).map((model) => (
+                <a key={model.name} href={model.url} target="_blank" rel="noreferrer" className="agentx-model-update-card">
+                  <span>{model.name}</span>
+                  <small>Open on Ollama</small>
+                </a>
+              ))}
+              {ollamaUpdates && ollamaUpdates.models.length === 0 ? <div className={tokens.helperText}>No model updates available yet.</div> : null}
+            </div>
+          </Panel>
           <Panel className="p-3">
             <div className={tokens.smallLabel}>Chat Model</div>
             <div className="mt-2 grid gap-2">
