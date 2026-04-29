@@ -7,7 +7,7 @@ import { ScrollArea } from "../components/ScrollArea";
 import { tokens } from "../tokens";
 
 
-const apiBaseUrl = () => `${window.location.protocol}//${window.location.hostname}:8000`;
+const apiBaseUrl = () => config.apiBase;
 
 type Props = {
   statusOk: boolean;

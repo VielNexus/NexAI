@@ -49,7 +49,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { CustomizationPage } from "./pages/CustomizationPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { clearAuth, loadAuth, logout, tryLogin, type AuthState } from "./auth";
-import { InspectorPanel } from "./components/InspectorPanel";
 import { ChatMessage } from "./components/ChatMessage";
 import { BrandBadge } from "./components/BrandBadge";
 import { createClientId } from "./clientId";
@@ -57,6 +56,9 @@ import { AgentXDropdown, type AgentXDropdownOption } from "./components/AgentXDr
 import { theme } from "./theme";
 import { CodeCanvas } from "./components/CodeCanvas";
 import { GitHubUpdateTicker } from "./components/GitHubUpdateTicker";
+import { TopStatusBar } from "./layout/TopStatusBar";
+import { ModeRail, type DeckModeId } from "./layout/ModeRail";
+import { ContextStackPanel } from "./layout/ContextStackPanel";
 import { defaultCodeCanvasState, detectCodeCanvas, languageLabel, loadCodeCanvasState, normalizeCodeCanvasLanguage, saveCodeCanvasState, type CodeCanvasState } from "./codeCanvas";
 import { applyPendingLayoutToSettings, clearPendingLayoutSave, loadPendingLayoutSave, pendingLayoutChangedEventName } from "./layoutPersistence";
 import { buildSendFailureMessage, isAbortError, restoreDraftAfterSendFailure, restoreDraftAfterStop, rollbackOptimisticThread } from "./chatSend";
@@ -2175,6 +2177,51 @@ ${script.content}
     );
   };
 
+  const showCommandDeck = !isMobile;
+  const showContextStack = !isMobile;
+
+  const commandDeckStatusItems = [
+    { label: "API", value: statusOk ? "online" : "offline", state: statusOk ? "ok" as const : "bad" as const },
+    {
+      label: "Ollama",
+      value: providerEndpointStatus || (statusOk ? "ready" : "offline"),
+      state: statusOk && providerEndpointStatus !== "unreachable" ? "ok" as const : "warn" as const,
+    },
+    { label: "Memory", value: "project", state: "ok" as const },
+    { label: "GitHub", value: "tracked", state: "ok" as const },
+  ];
+
+  const commandDeckModes = [
+    { id: "command" as const, label: "Command", icon: "⌁", active: activeView === "chat", title: "Chat and command surface" },
+    { id: "drafts" as const, label: "Drafts", icon: "✎", active: draftWorkspace.open, title: "Open Draft Workspace" },
+    { id: "memory" as const, label: "Memory", icon: "◈", active: activeView === "knowledge", title: "Knowledge and project memory" },
+    { id: "scripts" as const, label: "Scripts", icon: "◇", active: activeView === "scripts", title: "Saved code artifacts" },
+    { id: "models" as const, label: "Models", icon: "◎", active: activeView === "settings", title: "Model and Ollama settings" },
+    { id: "github" as const, label: "GitHub", icon: "⎇", active: activeView === "settings", title: "GitHub status and update controls" },
+    { id: "settings" as const, label: "Settings", icon: "⋯", active: activeView === "settings" || activeView === "customization", title: "Settings" },
+  ];
+
+  const selectDeckMode = (id: DeckModeId) => {
+    if (id === "command") {
+      setActiveView("chat");
+      return;
+    }
+    if (id === "drafts") {
+      setActiveView("chat");
+      void openDraftWorkspace("open");
+      return;
+    }
+    if (id === "memory") {
+      setActiveView("knowledge");
+      return;
+    }
+    if (id === "scripts") {
+      setActiveView("scripts");
+      return;
+    }
+    setActiveView("settings");
+  };
+
   const renderSidebar = (variant: "desktop" | "overlay") => {
     const headerRight =
       variant === "overlay" ? (
@@ -2450,6 +2497,18 @@ ${script.content}
         </div>
       ) : null}
 
+      {showCommandDeck ? (
+        <div className="agentx-command-deck-shell-top">
+          <TopStatusBar
+            title="AgentX Command Deck"
+            subtitle={activeProject ? `Project: ${activeProject.name}` : "Local-first AI command surface"}
+            items={commandDeckStatusItems}
+            rightSlot={<span className="agentx-command-deck-model">{chatProvider}:{chatModel || "select model"}</span>}
+          />
+          <GitHubUpdateTicker />
+        </div>
+      ) : null}
+
       {isMobile && navOpen && layoutSettings.showSidebar ? (
         <div
           className="fixed inset-0 z-40 bg-black/30"
@@ -2478,15 +2537,16 @@ ${script.content}
           tokens.gap,
           isMobile
             ? "grid-cols-1"
-            : layoutSettings.showSidebar && showInspector
-              ? "grid-cols-[300px_1fr_360px]"
+            : layoutSettings.showSidebar && showContextStack
+              ? "grid-cols-[76px_300px_minmax(0,1fr)_320px]"
               : layoutSettings.showSidebar
-                ? "grid-cols-[300px_1fr]"
-                : showInspector
-                  ? "grid-cols-[1fr_360px]"
-                  : "grid-cols-1",
+                ? "grid-cols-[76px_300px_minmax(0,1fr)]"
+                : showContextStack
+                  ? "grid-cols-[76px_minmax(0,1fr)_320px]"
+                  : "grid-cols-[76px_minmax(0,1fr)]",
         ].join(" ")}
       >
+        {!isMobile ? <ModeRail modes={commandDeckModes} onSelect={selectDeckMode} /> : null}
         {!isMobile && layoutSettings.showSidebar ? renderSidebar("desktop") : null}
 
         <Panel className={theme.shell.mainPanel}>
@@ -2585,7 +2645,6 @@ ${script.content}
               ) : null}
             </div>
           </div>
-            <GitHubUpdateTicker />
                     </>
           ) : null}
 
@@ -2868,23 +2927,19 @@ ${script.content}
           )}
         </Panel>
 
-        {showInspector ? (
-          <InspectorPanel
-            statusOk={statusOk}
-            statusName={statusName}
-            chatProvider={chatProvider}
-            chatModel={chatModel}
-            providerEndpointStatus={providerEndpointStatus}
-            providerModelStatus={providerModelStatus}
-            lastProviderError={lastProviderError}
-            retrieved={lastRetrieved}
-            auditTail={lastAuditTail}
-            verificationLevel={lastVerificationLevel}
-            verification={lastVerification}
-            webMeta={lastWebMeta}
-            activeThreadId={activeThread?.id ?? null}
-            unsafeStatus={unsafeStatus}
-            onUnsafeStatus={setUnsafeStatus}
+        {showContextStack ? (
+          <ContextStackPanel
+            threadTitle={activeThread?.title || null}
+            projectName={activeProject?.name || null}
+            provider={chatProvider}
+            model={chatModel}
+            apiOk={statusOk}
+            endpointStatus={providerEndpointStatus}
+            memoryEnabled={true}
+            draftOpen={draftWorkspace.open}
+            attachedCount={composerAttachments.length}
+            retrievedCount={lastRetrieved.length}
+            gitStatus="unknown"
           />
         ) : null}
       </div>
