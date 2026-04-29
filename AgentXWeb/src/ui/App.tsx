@@ -1,5 +1,5 @@
-import { createPortal } from "react-dom";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DEFAULT_AGENTX_SETTINGS,
   ToolSchema,
@@ -3051,14 +3051,7 @@ ${script.content}
         ? createPortal(
             <div
               className="agentx-project-context-menu-layer"
-              role="presentation"
-              tabIndex={-1}
               onClick={() => setProjectMenu(null)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setProjectMenu(null);
-                }
-              }}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setProjectMenu(null);

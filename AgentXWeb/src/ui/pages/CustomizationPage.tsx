@@ -240,33 +240,6 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className={tokens.smallLabel}>Layout</div>
-                <div className="mt-3 grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className={tokens.smallLabel}>Command Deck</div>
-
-                  <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm text-slate-100">
-                    <span>
-                      <span className="block font-semibold">Show mode rail</span>
-                      <span className="block text-xs text-slate-500">Left Command / Drafts / Memory / Models rail.</span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={deckLayoutPrefs.showModeRail}
-                      onChange={(event) => updateDeckLayoutPref("showModeRail", event.target.checked)}
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm text-slate-100">
-                    <span>
-                      <span className="block font-semibold">Show inspector / context stack</span>
-                      <span className="block text-xs text-slate-500">Right-side active thread, memory, model, and context panel.</span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={deckLayoutPrefs.showContextStack}
-                      onChange={(event) => updateDeckLayoutPref("showContextStack", event.target.checked)}
-                    />
-                  </label>
-                </div>
                 <div className={tokens.helperText}>Choose which major app regions stay visible.</div>
               </div>
               <button className={tokens.buttonSecondary} disabled={layoutSaving} onClick={resetLayout}>
@@ -289,6 +262,26 @@ export function CustomizationPage({ statusOk, settings, layoutGuards, onSettings
             ) : null}
 
             <div className="mt-3 grid gap-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+                <div className={tokens.smallLabel}>Command Deck</div>
+                <div className="mt-3 grid gap-2">
+                  <AgentXToggle
+                    checked={deckLayoutPrefs.showModeRail}
+                    disabled={layoutSaving}
+                    label="Show Mode Rail"
+                    helper="Left Command, Drafts, Memory, Models, GitHub, and Settings rail."
+                    onChange={(checked) => updateDeckLayoutPref("showModeRail", checked)}
+                  />
+                  <AgentXToggle
+                    checked={deckLayoutPrefs.showContextStack}
+                    disabled={layoutSaving}
+                    label="Show Inspector / Context Stack"
+                    helper="Right-side active thread, model, memory, attachments, and retrieved context panel."
+                    onChange={(checked) => updateDeckLayoutPref("showContextStack", checked)}
+                  />
+                </div>
+              </div>
+
               <AgentXToggle
                 checked={effectiveLayout.showSidebar}
                 disabled={layoutSaving}

@@ -95,7 +95,6 @@ export function SettingsPage(props: Props) {
       },
     }));
   };
-
   const refreshGithubStatus = async () => {
     if (!props.statusOk) return;
     setGithubBusy(true);
