@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_AGENTX_SETTINGS,
@@ -17,6 +18,8 @@ import {
   listProjects,
   listScripts,
   createProject as createProjectRecord,
+  updateProject as updateProjectRecord,
+  deleteProject as deleteProjectRecord,
   createScript,
   updateScript,
   deleteScript,
@@ -519,6 +522,25 @@ export function App() {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const activeProject = useMemo(() => projects.find((project) => project.id === activeProjectId) ?? null, [activeProjectId, projects]);
+  const [projectMenu, setProjectMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!projectMenu) return;
+
+    const onProjectMenuEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setProjectMenu(null);
+      }
+    };
+
+    window.addEventListener("keydown", onProjectMenuEscape, true);
+
+    return () => {
+      window.removeEventListener("keydown", onProjectMenuEscape, true);
+    };
+  }, [projectMenu]);
   const [scripts, setScripts] = useState<ScriptRecord[]>([]);
   const [scriptQuery, setScriptQuery] = useState("");
   const [activeScriptId, setActiveScriptId] = useState<string | null>(null);
@@ -1012,6 +1034,49 @@ export function App() {
       setSystemMessage("Project create failed.");
     }
   }, [onAfterNavAction, setSystemMessage, statusOk]);
+
+  const renameProject = useCallback(async (project: ProjectRecord) => {
+    if (!statusOk) {
+      setSystemMessage("Offline - cannot rename projects until the API is reachable.");
+      return;
+    }
+
+    const currentName = project.name || "Untitled Project";
+    const nextName = window.prompt("Rename project", currentName)?.trim();
+
+    if (!nextName || nextName === currentName) return;
+
+    try {
+      const updated = await updateProjectRecord(project.id, { name: nextName });
+      setProjects((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSystemMessage(`Project renamed to "${updated.name}".`);
+    } catch (e) {
+      console.error("rename project failed", e);
+      setSystemMessage("Project rename failed.");
+    }
+  }, [statusOk, setSystemMessage]);
+
+  const deleteProject = useCallback(async (project: ProjectRecord) => {
+    if (!statusOk) {
+      setSystemMessage("Offline - cannot delete projects until the API is reachable.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete project "${project.name}"? Chats will not be deleted, but the project grouping will be removed.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteProjectRecord(project.id);
+      setProjects((prev) => prev.filter((item) => item.id !== project.id));
+      setThreads((prev) => prev.map((thread) => thread.project_id === project.id ? { ...thread, project_id: null } : thread));
+      setActiveThread((prev) => prev?.project_id === project.id ? { ...prev, project_id: null } : prev);
+      setActiveProjectId((prev) => prev === project.id ? null : prev);
+      setSystemMessage(`Project "${project.name}" deleted.`);
+    } catch (e) {
+      console.error("delete project failed", e);
+      setSystemMessage("Project delete failed.");
+    }
+  }, [statusOk, setSystemMessage]);
 
   const assignActiveThreadToProject = useCallback(async (projectId: string | null) => {
     if (!activeThread?.id) {
@@ -2305,6 +2370,17 @@ ${script.content}
                         setActiveProjectId(p.id);
                         onAfterNavAction();
                       }}
+                      onDoubleClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void renameProject(p);
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setProjectMenu({ id: p.id, x: event.clientX, y: event.clientY });
+                      }}
+                      title="Click to select. Double-click or right-click to rename/delete."
                     >
                       <span className="truncate">{p.name}</span>
                       {activeThread?.project_id !== p.id ? (
@@ -2969,6 +3045,58 @@ ${script.content}
           />
         ) : null}
       </div>
+
+
+      {projectMenu
+        ? createPortal(
+            <div
+              className="agentx-project-context-menu-layer"
+              role="presentation"
+              tabIndex={-1}
+              onClick={() => setProjectMenu(null)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setProjectMenu(null);
+                }
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setProjectMenu(null);
+              }}
+            >
+              <div
+                className="agentx-project-context-menu agentx-context-menu"
+                style={{ left: projectMenu.x, top: projectMenu.y }}
+                onClick={(event) => event.stopPropagation()}
+                onContextMenu={(event) => event.preventDefault()}
+              >
+                <button
+                  className={`${tokens.buttonSecondary} w-full justify-start`}
+                  type="button"
+                  onClick={() => {
+                    const project = projects.find((item) => item.id === projectMenu.id);
+                    setProjectMenu(null);
+                    if (project) void renameProject(project);
+                  }}
+                >
+                  Rename
+                </button>
+                <button
+                  className={`${tokens.buttonDanger} w-full justify-start`}
+                  type="button"
+                  onClick={() => {
+                    const project = projects.find((item) => item.id === projectMenu.id);
+                    setProjectMenu(null);
+                    if (project) void deleteProject(project);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {draftWorkspace.open ? (
         <div className="agentx-draft-workspace" role="dialog" aria-modal="true" aria-label="Draft Workspace">

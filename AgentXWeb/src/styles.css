@@ -3380,3 +3380,37 @@ button.agentx-sidebar-action:disabled * {
   min-height: 0;
   gap: 10px;
 }
+
+.agentx-project-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(100, 180, 255, 0.22);
+  background: rgba(7, 13, 28, 0.96);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(18px);
+}
+
+.agentx-project-context-menu button {
+  min-height: 42px;
+  justify-content: center;
+  color: rgba(245, 250, 255, 0.96) !important;
+  -webkit-text-fill-color: rgba(245, 250, 255, 0.96) !important;
+}
+
+.agentx-project-context-menu button + button {
+  margin-top: 8px;
+}
+
+.agentx-project-context-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: transparent;
+}
+
+.agentx-project-context-menu-layer .agentx-project-context-menu {
+  z-index: 9999;
+}
