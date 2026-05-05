@@ -39,6 +39,7 @@ from agentx_api.routes.workbench import router as workbench_router
 from agentx_api.routes.qol import router as qol_router
 from agentx_api.routes.runtime import router as runtime_router
 from agentx_api.routes.validation import router as validation_router
+from agentx_api.routes.health import router as health_router
 from agentx_api.runtime_guard import RequestContextMiddleware, build_rate_limiter, configure_logging
 
 
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
         return {"ok": True, "hint": "Try /v1/status"}
 
     app.include_router(status_router, prefix="/v1")
+    app.include_router(health_router, prefix="/v1")
     app.include_router(runtime_router, prefix="/v1")
     app.include_router(validation_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(auth_router, prefix="/v1")

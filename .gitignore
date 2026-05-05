@@ -181,3 +181,6 @@ __pycache__/
 
 # Local config backups
 AgentX/config/*.bak-*
+
+# AgentX runtime memory
+AgentX/memory/

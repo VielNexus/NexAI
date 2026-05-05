@@ -23,6 +23,63 @@ export type RagIngestResult = { ok: boolean; doc_id: string; title: string; sour
 export type RagQueryHit = { doc_id: string; chunk_id: string; title: string; source: string; snippet: string; content: string; score?: number | null };
 export type RagQueryResponse = { hits: RagQueryHit[] };
 
+
+export type HealthCheckStatus = {
+  ok: boolean;
+  url?: string;
+  host?: string;
+  port?: number;
+  latency_ms?: number;
+  error?: string;
+};
+
+export type HealthPathStatus = {
+  path: string;
+  exists: boolean;
+  writable: boolean;
+};
+
+export type FullHealthResponse = {
+  ok: boolean;
+  version: string;
+  service: string;
+  api: {
+    host: string;
+    port: number;
+    auth_enabled: boolean;
+    rate_limit_enabled: boolean;
+  };
+  git: {
+    branch?: string | null;
+    commit?: string | null;
+  };
+  system: {
+    platform: string;
+    python: string;
+  };
+  ollama: {
+    default: HealthCheckStatus;
+    fast?: HealthCheckStatus | null;
+    heavy?: HealthCheckStatus | null;
+  };
+  workspace: HealthPathStatus;
+  data: {
+    settings: string;
+    threads: HealthPathStatus;
+    projects: HealthPathStatus;
+    scripts: HealthPathStatus;
+    rag_db: string;
+  };
+  validation: {
+    available: boolean;
+  };
+  diagnostics: {
+    config?: Record<string, unknown>;
+    warnings?: string[];
+    errors?: string[];
+  };
+};
+
 export type StatusResponse = {
   ok: boolean;
   name: string;
@@ -935,6 +992,12 @@ async function handle<T>(res: Response): Promise<T> {
     throw new ApiError(message, { status: res.status, detail: body, providerError });
   }
   return (await res.json()) as T;
+}
+
+
+export async function getHealthFull(signal?: AbortSignal): Promise<FullHealthResponse> {
+  const res = await fetch(`${config.apiBase}/v1/health/full`, { signal, headers: authHeaders() });
+  return handle(res);
 }
 
 export async function getStatus(signal?: AbortSignal): Promise<StatusResponse> {
