@@ -52,6 +52,18 @@ function endpointLabel(endpoint: string): string {
   return endpoint;
 }
 
+function endpointPurpose(endpoint: string): string {
+  if (endpoint === "default") return "Primary fallback route";
+  if (endpoint === "fast") return "Low-latency draft/chat route";
+  if (endpoint === "heavy") return "Reasoning, review, and repair route";
+  if (endpoint === "cloud") return "Remote provider route";
+  return "Custom route";
+}
+
+function normalizeBaseUrl(value: string | null | undefined): string {
+  return String(value || "").trim().replace(/\/$/, "");
+}
+
 
 function formatNumber(value: number | null | undefined, suffix = ""): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
@@ -159,6 +171,41 @@ export function ModelsPage(props: Props) {
   const endpointNames = Array.from(new Set(cards.map((card) => card.endpoint))).sort();
   const loadedRuntimeModels = useMemo(() => new Set((runtimePs?.models ?? []).map((model) => modelRuntimeName(model))), [runtimePs]);
 
+  const endpointProfiles = useMemo(() => {
+    const endpoints = props.status.ollama_endpoints ?? {};
+    return Object.entries(endpoints).map(([endpoint, info]) => ({
+      endpoint,
+      label: endpointLabel(endpoint),
+      purpose: endpointPurpose(endpoint),
+      baseUrl: normalizeBaseUrl(info.base_url || props.status.ollama_base_url || ""),
+      reachable: typeof info.reachable === "boolean" ? info.reachable : null,
+      gpuPin: info.gpu_pin ?? null,
+      modelCount: (info.models ?? []).length,
+      error: info.error || info.error_type || null,
+    })).sort((a, b) => {
+      const order: Record<string, number> = { default: 0, fast: 1, heavy: 2 };
+      return (order[a.endpoint] ?? 9) - (order[b.endpoint] ?? 9) || a.endpoint.localeCompare(b.endpoint);
+    });
+  }, [props.status.ollama_base_url, props.status.ollama_endpoints]);
+
+  const endpointWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    const byName = Object.fromEntries(endpointProfiles.map((profile) => [profile.endpoint, profile]));
+    const fastUrl = byName.fast?.baseUrl;
+    const heavyUrl = byName.heavy?.baseUrl;
+    if (fastUrl && heavyUrl && fastUrl === heavyUrl) {
+      warnings.push("Fast and Heavy endpoints are using the same base URL. Use separate Ollama ports if you want true route separation.");
+    }
+    for (const profile of endpointProfiles) {
+      if (profile.reachable === false) warnings.push(`${profile.label} endpoint is unreachable.`);
+      if (profile.reachable !== false && profile.modelCount === 0) warnings.push(`${profile.label} endpoint reports zero models.`);
+      if ((profile.endpoint === "fast" || profile.endpoint === "heavy") && !profile.gpuPin) {
+        warnings.push(`${profile.label} endpoint has no GPU pin metadata.`);
+      }
+    }
+    return warnings;
+  }, [endpointProfiles]);
+
   const loadRuntime = async (endpoint = runtimeEndpoint) => {
     setRuntimeLoading(true);
     setRuntimeError(null);
@@ -261,6 +308,37 @@ export function ModelsPage(props: Props) {
 
       {props.status.models_error ? (
         <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{props.status.models_error}</div>
+      ) : null}
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {endpointProfiles.map((profile) => (
+          <Panel key={profile.endpoint} className="p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={tokens.smallLabel}>{profile.label} Profile</div>
+                <div className="mt-1 text-sm font-semibold text-slate-100">{profile.purpose}</div>
+              </div>
+              <span className={profile.reachable === false ? "agentx-model-status agentx-model-status--bad" : "agentx-model-status agentx-model-status--ok"}>
+                {profile.reachable === false ? "offline" : "online"}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-1 text-xs text-slate-300">
+              <div>Base: <strong className="break-all">{profile.baseUrl || "unknown"}</strong></div>
+              <div>GPU: <strong>{profile.gpuPin ? `GPU ${profile.gpuPin}` : "not pinned"}</strong></div>
+              <div>Models: <strong>{profile.modelCount}</strong></div>
+              {profile.error ? <div className="text-rose-200">Error: {String(profile.error)}</div> : null}
+            </div>
+          </Panel>
+        ))}
+      </div>
+
+      {endpointWarnings.length ? (
+        <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <div className="mb-1 font-semibold">Routing warnings</div>
+          <ul className="list-disc space-y-1 pl-5">
+            {endpointWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
       ) : null}
 
       <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
