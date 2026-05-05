@@ -11,7 +11,7 @@ const apiBaseUrl = () => config.apiBase;
 
 type Props = {
   statusOk: boolean;
-  status: Pick<StatusResponse, "chat_provider" | "chat_model" | "available_chat_models" | "models_error" | "models_refreshing" | "ollama_base_url">;
+  status: Pick<StatusResponse, "chat_provider" | "chat_model" | "available_chat_models" | "models_error" | "models_refreshing" | "ollama_base_url" | "ollama_endpoints" | "models_last_refresh">;
   settings: AgentXSettings | null;
   onSettingsSaved: (settings: AgentXSettings) => void;
   onSystemMessage: (msg: string) => void;
@@ -134,6 +134,16 @@ export function SettingsPage(props: Props) {
     void refreshOllamaUpdates(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.statusOk]);
+
+  const updateModelBehavior = (patch: Partial<AgentXSettings["modelBehavior"]>) => {
+    setSettings((prev) => ({
+      ...prev,
+      modelBehavior: normalizeModelBehaviorSettings({
+        ...(prev.modelBehavior ?? DEFAULT_MODEL_BEHAVIOR_SETTINGS),
+        ...patch,
+      }),
+    }));
+  };
 
   const save = async (next: AgentXSettings) => {
     if (!props.statusOk) {

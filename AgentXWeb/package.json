@@ -1,11 +1,11 @@
 {
   "name": "agentx-web",
   "private": true,
-  "version": "0.2.6",
+  "version": "0.2.7-v9",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run typecheck && vite build",
     "test": "vitest run",
     "typecheck": "npm exec tsc -- -p tsconfig.json --noEmit",
     "preview": "vite preview"

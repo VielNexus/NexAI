@@ -215,6 +215,126 @@ export type ToolsSchemaResponse = {
 };
 
 
+export type ValidationPresetCommand = {
+  name: string;
+  command: string;
+  cwd: string;
+  timeout_s: number;
+  required: boolean;
+};
+
+export type ValidationPreset = {
+  name: string;
+  commands: ValidationPresetCommand[];
+};
+
+export type ValidationPresetsResponse = {
+  ok: boolean;
+  presets: ValidationPreset[];
+};
+
+export type ValidationWorkspace = {
+  label: string;
+  path: string;
+  preset: string;
+  kind: string;
+  confidence: number;
+};
+
+export type ValidationWorkspacesResponse = {
+  ok: boolean;
+  workspaces: ValidationWorkspace[];
+};
+
+export type ValidationStepResult = {
+  name: string;
+  command: string;
+  cwd: string;
+  exit_code: number | null;
+  ok: boolean;
+  duration_ms: number;
+  stdout: string;
+  stderr: string;
+  timeout?: boolean;
+  skipped?: boolean;
+  error?: string | null;
+};
+
+export type ValidationRunResult = {
+  ok: boolean;
+  run_id: string;
+  preset: string;
+  workspace_path: string;
+  started_at: number;
+  duration_ms: number;
+  results: ValidationStepResult[];
+  summary: Record<string, unknown>;
+};
+
+export type ValidationHistoryResponse = {
+  ok: boolean;
+  runs: ValidationRunResult[];
+};
+
+export type RepairPacket = {
+  created_at: number;
+  candidate_id: string;
+  phase: string;
+  title: string;
+  summary: string;
+  failed_steps: Array<Record<string, unknown>>;
+  recommended_next_steps: string[];
+  prompt: string;
+  original_patch_excerpt: string;
+  logs_excerpt: string;
+};
+
+export type PatchCandidateResult = {
+  ok: boolean;
+  candidate_id: string;
+  source_workspace_path: string;
+  temp_workspace_path: string | null;
+  preset: string;
+  started_at: number;
+  duration_ms: number;
+  kept: boolean;
+  apply_result: ValidationStepResult;
+  validation_result: ValidationRunResult | null;
+  summary: Record<string, unknown>;
+  repair_packet?: RepairPacket | null;
+  repair_of_candidate_id?: string | null;
+};
+
+export type PatchCandidateHistoryItem = {
+  candidate_id: string;
+  repair_of_candidate_id?: string | null;
+  ok: boolean;
+  preset: string;
+  source_workspace_path: string;
+  temp_workspace_path?: string | null;
+  kept?: boolean;
+  started_at: number;
+  duration_ms: number;
+  phase?: string | null;
+  summary?: Record<string, unknown>;
+  apply_ok?: boolean | null;
+  apply_step?: string | null;
+  apply_error_excerpt?: string | null;
+  validation_ok?: boolean | null;
+  validation_run_id?: string | null;
+  validation_first_failure?: string | null;
+  validation_error_excerpt?: string | null;
+  repair_packet_title?: string | null;
+  has_repair_packet?: boolean;
+  patch_excerpt?: string | null;
+};
+
+export type PatchCandidateHistoryResponse = {
+  ok: boolean;
+  candidates: PatchCandidateHistoryItem[];
+};
+
+
 export type DraftMode = "open" | "explain" | "rewrite" | "explain_and_rewrite";
 
 export type DraftGenerateRequest = {
@@ -235,6 +355,34 @@ export type DraftGenerateResponse = {
   model_name?: string | null;
   generated_at: number;
 };
+
+
+export type WorkbenchImportResponse = {
+  project?: {
+    project_id?: string;
+    root?: string;
+    original_archive?: string;
+    original_zip?: string;
+    extracted_dir?: string;
+    analysis_dir?: string;
+    files_extracted?: number;
+    uncompressed_bytes?: number;
+    archive_type?: string;
+  };
+  summary?: {
+    analyzed_files?: number;
+    total_files?: number;
+    syntax_errors?: number;
+    risk_findings?: number;
+    conversion_findings?: number;
+    stub_findings?: number;
+    counts_by_kind?: Record<string, number>;
+  };
+  final_report_path?: string;
+  thread_workspace?: unknown;
+};
+
+export type WorkbenchReportResponse = { path: string; content: string };
 
 export type GitHubStatusResponse = {
   ok: boolean;
@@ -274,6 +422,79 @@ export type OllamaModelUpdatesResponse = {
   models: OllamaModelUpdate[];
   error?: string | null;
 };
+
+
+export type OllamaPsModel = Record<string, unknown> & {
+  name?: string;
+  model?: string;
+  size?: number;
+  size_vram?: number;
+  processor?: string;
+  context?: number;
+  expires_at?: string;
+};
+
+export type OllamaPsResponse = {
+  ok: boolean;
+  endpoint: string;
+  base_url: string;
+  duration_ms: number;
+  models: OllamaPsModel[];
+  raw?: Record<string, unknown>;
+};
+
+export type OllamaBenchResponse = {
+  ok: boolean;
+  endpoint: string;
+  base_url: string;
+  model: string;
+  total_ms: number;
+  load_ms?: number | null;
+  prompt_eval_ms?: number | null;
+  eval_ms?: number | null;
+  prompt_tokens?: number | null;
+  output_tokens?: number | null;
+  tokens_per_second?: number | null;
+  prompt_tokens_per_second?: number | null;
+  response_preview?: string | null;
+  raw_done_reason?: string | null;
+};
+
+export type ContextBudgetResponse = {
+  ok: boolean;
+  model?: string | null;
+  target_context_tokens: number;
+  estimated_used_tokens: number;
+  estimated_remaining_tokens: number;
+  estimated_used_pct: number;
+  risk: "low" | "medium" | "high" | "critical" | string;
+  breakdown: Record<string, number>;
+  profile?: {
+    model?: string | null;
+    target_context_tokens: number;
+    context_tier: string;
+    role_hint: string;
+    advice: string;
+  };
+  note?: string;
+};
+
+export type OllamaCompareResponse = {
+  ok: boolean;
+  model: string;
+  results: OllamaBenchResponse[];
+  errors: { endpoint: string; base_url?: string; error: string }[];
+  best_endpoint?: string | null;
+  best_tokens_per_second?: number | null;
+};
+
+export type OllamaBenchHistoryResponse = {
+  ok: boolean;
+  path: string;
+  history: OllamaBenchResponse[];
+};
+
+export type FsReadTextResponse = { path: string; content: string; bytes: number };
 
 export type WebPolicyResponse = {
   ok: boolean;
@@ -843,6 +1064,25 @@ export async function generateDraft(payload: DraftGenerateRequest): Promise<Draf
   return handle(res);
 }
 
+export async function importWorkbenchArchive(file: File, projectName?: string, threadId?: string): Promise<WorkbenchImportResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  if (projectName?.trim()) form.append("project_name", projectName.trim());
+  if (threadId?.trim()) form.append("thread_id", threadId.trim());
+  const res = await fetch(`${config.apiBase}/v1/workbench/import-archive`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  return handle(res);
+}
+
+export async function getWorkbenchReport(path: string): Promise<WorkbenchReportResponse> {
+  const params = new URLSearchParams({ path });
+  const res = await fetch(`${config.apiBase}/v1/workbench/report?${params.toString()}`, { headers: authHeaders() });
+  return handle(res);
+}
+
 export async function getCapabilities(): Promise<CapabilitiesResponse> {
   const res = await fetch(`${config.apiBase}/v1/capabilities`, { headers: authHeaders() });
   return handle(res);
@@ -1156,6 +1396,96 @@ export async function getOllamaModelUpdates(refresh = false): Promise<OllamaMode
   return handle(res);
 }
 
+
+export async function getOllamaPs(endpoint = "default"): Promise<OllamaPsResponse> {
+  const res = await fetch(`${config.apiBase}/v1/model-ops/ollama/ps`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ endpoint }),
+  });
+  return handle(res);
+}
+
+export async function runOllamaBenchmark(payload: { endpoint: string; model: string; prompt?: string; num_predict?: number; num_ctx?: number | null; temperature?: number }): Promise<OllamaBenchResponse> {
+  const res = await fetch(`${config.apiBase}/v1/model-ops/ollama/bench`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function estimateContextBudget(payload: { model?: string | null; message?: string; attachment_chars?: number; tool_context_chars?: number; system_context_chars?: number; target_context_tokens?: number | null }): Promise<ContextBudgetResponse> {
+  const res = await fetch(`${config.apiBase}/v1/model-ops/context-budget`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function compareOllamaEndpoints(payload: { model: string; endpoints?: string[]; prompt?: string; num_predict?: number; num_ctx?: number | null; temperature?: number }): Promise<OllamaCompareResponse> {
+  const res = await fetch(`${config.apiBase}/v1/model-ops/ollama/compare`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getOllamaBenchmarkHistory(limit = 25): Promise<OllamaBenchHistoryResponse> {
+  const res = await fetch(`${config.apiBase}/v1/model-ops/bench/history?limit=${encodeURIComponent(String(limit))}`, { headers: authHeaders() });
+  return handle(res);
+}
+
+
+export async function getValidationPresets(): Promise<ValidationPresetsResponse> {
+  const res = await fetch(`${config.apiBase}/v1/validation/presets`, { headers: authHeaders() });
+  return handle(res);
+}
+
+export async function getValidationWorkspaces(): Promise<ValidationWorkspacesResponse> {
+  const res = await fetch(`${config.apiBase}/v1/validation/workspaces`, { headers: authHeaders() });
+  return handle(res);
+}
+
+export async function runValidation(payload: { workspace_path: string; preset: string }): Promise<ValidationRunResult> {
+  const res = await fetch(`${config.apiBase}/v1/validation/run`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function validatePatchCandidate(payload: { workspace_path: string; preset: string; patch_text: string; keep_worktree?: boolean; repair_of_candidate_id?: string | null }): Promise<PatchCandidateResult> {
+  const res = await fetch(`${config.apiBase}/v1/validation/patch-candidate`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getValidationHistory(limit = 25): Promise<ValidationHistoryResponse> {
+  const res = await fetch(`${config.apiBase}/v1/validation/history?limit=${encodeURIComponent(String(limit))}`, { headers: authHeaders() });
+  return handle(res);
+}
+
+export async function getPatchCandidateHistory(limit = 25): Promise<PatchCandidateHistoryResponse> {
+  const res = await fetch(`${config.apiBase}/v1/validation/patch-candidates/history?limit=${encodeURIComponent(String(limit))}`, { headers: authHeaders() });
+  return handle(res);
+}
+
+export async function readFsText(path: string, threadId?: string | null): Promise<FsReadTextResponse> {
+  const res = await fetch(`${config.apiBase}/v1/fs/read_text`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ path, thread_id: threadId ?? null }),
+  });
+  return handle(res);
+}
+
 export type ProjectMemoryEntry = {
   entry_id: string;
   title: string;
@@ -1305,7 +1635,7 @@ export async function draftTaskReflection(payload: DraftTaskReflectionRequest): 
     headers: jsonHeaders(),
     body: JSON.stringify(payload),
   });
-  return handleJson<TaskReflectionDraft>(res);
+  return handle<TaskReflectionDraft>(res);
 }
 
 export async function promoteTaskReflection(payload: {
@@ -1326,6 +1656,6 @@ export async function promoteTaskReflection(payload: {
     headers: jsonHeaders(),
     body: JSON.stringify(payload),
   });
-  return handleJson<{ ok: boolean; entry_id: string; entry: unknown }>(res);
+  return handle<{ ok: boolean; entry_id: string; entry: unknown }>(res);
 }
 

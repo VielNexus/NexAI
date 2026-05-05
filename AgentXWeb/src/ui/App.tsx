@@ -8,6 +8,9 @@ import {
   createThread,
   getToolsSchema,
   generateDraft,
+  importWorkbenchArchive,
+  getWorkbenchReport,
+  readFsText,
   getSettings,
   getStatus,
   getStatusRefresh,
@@ -53,6 +56,7 @@ import { CustomizationPage } from "./pages/CustomizationPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { ValidationPage } from "./pages/ValidationPage";
 import { clearAuth, loadAuth, logout, tryLogin, type AuthState } from "./auth";
 import { ChatMessage } from "./components/ChatMessage";
 import { BrandBadge } from "./components/BrandBadge";
@@ -473,7 +477,7 @@ function messageScriptTitle(thread: Thread | null, messageId: string, fallback =
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(() => loadAuth());
   const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
-  const [activeView, setActiveView] = useState<"chat" | "settings" | "customization" | "scripts" | "knowledge" | "models">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "settings" | "customization" | "scripts" | "knowledge" | "models" | "validation" | "workspaces">("chat");
   const [activeDeckMode, setActiveDeckMode] = useState<DeckModeId>("command");
   const [deckLayoutPrefs, setDeckLayoutPrefs] = useState(() => ({
     showModeRail: window.localStorage.getItem("agentx.deck.showModeRail") !== "false",
@@ -595,6 +599,7 @@ export function App() {
   const [composerRagMode, setComposerRagMode] = useState<ComposerRagMode>("auto");
   const [draftWorkspace, setDraftWorkspace] = useState<DraftWorkspaceState>(() => emptyDraftWorkspace());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const archiveInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
@@ -1231,7 +1236,7 @@ ${script.content}
       console.error("Failed to delete script", e);
       setSystemMessage("Script delete failed.");
     }
-  }, [setSystemMessage]);
+  }, [activeThread?.id, setSystemMessage]);
 
   const selectThread = useCallback(async (id: string) => {
     if (!statusOk) return;
@@ -1505,9 +1510,191 @@ ${script.content}
     setComposerMenuOpen(false);
   }, []);
 
+
+  useEffect(() => {
+    const handleWorkspaceAskFix = (event: MessageEvent) => {
+      const data = event.data as { type?: string; prompt?: string; path?: string } | null;
+      if (!data || data.type !== "agentx:ask-fix-file") return;
+      const prompt = String(data.prompt || "").trim();
+      if (!prompt) return;
+      setDraft((prev) => prev.trim() ? `${prev.trim()}\n\n${prompt}` : prompt);
+      setActiveView("chat");
+      setSystemMessage(`Workspace fix request loaded${data.path ? ` for ${data.path}` : ""}. Review it, then press Send.`);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener("message", handleWorkspaceAskFix);
+    return () => window.removeEventListener("message", handleWorkspaceAskFix);
+  }, [setSystemMessage]);
+
   const removeComposerAttachment = useCallback((id: string) => {
     setComposerAttachments((prev) => prev.filter((item) => item.id !== id));
   }, []);
+
+
+function rememberAgentXWorkspacePatchResponse(content: string) {
+  const text = String(content || "");
+  const hasPatch =
+    /###\s*Replacement Content\s*```/i.test(text) ||
+    /\*\*Replacement Content\*\*\s*```/i.test(text) ||
+    /agentx-workspace-patch/i.test(text);
+
+  if (!hasPatch) return;
+
+  try {
+    window.localStorage.setItem("agentx.lastAssistantPatch", text);
+    window.localStorage.setItem("agentx.pendingPatchResponse", text);
+    window.sessionStorage.setItem("agentx.lastAssistantPatch", text);
+    window.sessionStorage.setItem("agentx.pendingPatchResponse", text);
+    window.dispatchEvent(new CustomEvent("agentx-workspace-patch-response", { detail: { content: text } }));
+  } catch {
+    // Ignore storage failures; Workspaces can still use manual paste fallback.
+  }
+}
+
+
+
+function rememberAgentXLatestPatchResponse(content: string) {
+  const text = String(content || "");
+  if (!text.trim()) return;
+
+  const payload = JSON.stringify({
+    ts: Date.now(),
+    content: text,
+  });
+
+  try {
+    // Always keep the latest assistant response so Workspaces can preload any patch text,
+    // even plain text such as "Title: This is\nheader: Sample!".
+    window.localStorage.setItem("agentx.latestAssistantResponse", payload);
+    window.sessionStorage.setItem("agentx.latestAssistantResponse", payload);
+
+    // Keep legacy names too, so existing Workspaces import buttons keep working.
+    window.localStorage.setItem("agentx.lastAssistantPatch", text);
+    window.localStorage.setItem("agentx.pendingPatchResponse", text);
+    window.sessionStorage.setItem("agentx.lastAssistantPatch", text);
+    window.sessionStorage.setItem("agentx.pendingPatchResponse", text);
+
+    window.dispatchEvent(new CustomEvent("agentx-workspace-patch-response", { detail: { content: text, ts: Date.now() } }));
+  } catch {
+    // Storage can fail in private mode; Workspaces still has manual paste fallback.
+  }
+}
+
+
+  const importWorkbenchArchives = useCallback(async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setComposerMenuOpen(false);
+
+    const name = file.name
+      .replace(/\.(zip|rar|7z|tar|tgz|tar\.gz)$/i, "")
+      .replace(/[^a-z0-9._-]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "server-import";
+
+    setSystemMessage(`Workbench: preparing chat workspace for ${file.name}...`);
+
+    try {
+      let thread = activeThread;
+
+      if (!thread?.id) {
+        thread = await createThread(undefined, {
+          chatProvider,
+          chatModel,
+          projectId: activeProjectId,
+        });
+        setThreads((prev) => [thread!, ...prev.filter((item) => item.id !== thread!.id)]);
+        setActiveThread(thread);
+      }
+
+      const threadId = thread.id;
+      setSystemMessage(`Workbench: uploading and analyzing ${file.name} for this chat...`);
+
+      const result = await importWorkbenchArchive(file, name, threadId);
+      const reportPath = result.final_report_path || "";
+      let report = "";
+
+      if (reportPath) {
+        try {
+          const reportResult = await getWorkbenchReport(reportPath);
+          report = reportResult.content || "";
+        } catch (err) {
+          report = `Report generated at: ${reportPath}\n\nCould not fetch report text: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
+      const summary = result.summary || {};
+      const projectId = result.project?.project_id || name;
+      const content = [
+        `# Workbench Analysis Complete: ${file.name}`,
+        "",
+        `Project: ${projectId}`,
+        `Thread: ${threadId}`,
+        `Report: ${reportPath || "not returned"}`,
+        result.thread_workspace ? `Workspace attached: yes` : `Workspace attached: no`,
+        "",
+        "## Summary",
+        `- Total files: ${summary.total_files ?? "unknown"}`,
+        `- Analyzed files: ${summary.analyzed_files ?? "unknown"}`,
+        `- Syntax errors: ${summary.syntax_errors ?? "unknown"}`,
+        `- Risk findings: ${summary.risk_findings ?? "unknown"}`,
+        `- Converted/server completion findings: ${summary.conversion_findings ?? "unknown"}`,
+        `- Stub/empty findings: ${summary.stub_findings ?? "unknown"}`,
+        "",
+        report ? "## Full Report" : "",
+        report,
+      ].filter(Boolean).join("\n");
+
+      const workbenchMessage = {
+        id: createClientId("workbench"),
+        role: "assistant" as const,
+        content,
+        ts: Date.now() / 1000,
+      };
+
+      setActiveThread((prev) => {
+        const base = prev?.id === threadId ? prev : thread!;
+        return {
+          ...base,
+          messages: [...(base.messages || []), workbenchMessage],
+          updated_at: Date.now() / 1000,
+        };
+      });
+
+      setThreads((prev) => prev.map((item) => item.id === threadId ? {
+        ...item,
+        updated_at: Date.now() / 1000,
+      } : item));
+
+      setSystemMessage(`Workbench analysis finished and attached to this chat for ${file.name}.`);
+    } catch (err) {
+      setSystemMessage(`Workbench import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (archiveInputRef.current) archiveInputRef.current.value = "";
+    }
+  }, [activeThread, chatProvider, chatModel, activeProjectId, setSystemMessage]);
+
+  // agentx-workbench-global-drop
+  useEffect(() => {
+    const isArchive = (file: File) => /\.(zip|rar|7z|tar|tgz|tar\.gz)$/i.test(file.name);
+    const onDragOver = (event: DragEvent) => {
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0 && Array.from(files).some(isArchive)) {
+        event.preventDefault();
+      }
+    };
+    const onDrop = (event: DragEvent) => {
+      const files = event.dataTransfer?.files;
+      if (!files || files.length === 0 || !Array.from(files).some(isArchive)) return;
+      event.preventDefault();
+      void importWorkbenchArchives(files);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [importWorkbenchArchives]);
 
   const insertFileSearchPrompt = useCallback(() => {
     setDraft((prev) => {
@@ -1517,6 +1704,34 @@ ${script.content}
     setComposerMenuOpen(false);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
+
+
+  const attachAllowedPath = useCallback(async () => {
+    const raw = window.prompt("Enter an allowed local file path to attach into this chat:", "");
+    const path = String(raw || "").trim();
+    setComposerMenuOpen(false);
+    if (!path) return;
+    try {
+      const res = await readFsText(path, activeThread?.id ?? null);
+      const content = String(res.content || "");
+      setComposerAttachments((prev) => [
+        ...prev,
+        {
+          id: createClientId("attachment"),
+          name: res.path || path,
+          kind: "file" as const,
+          size: res.bytes || content.length,
+          content,
+        },
+      ].slice(-8));
+      setDraft((prev) => prev.includes(`@${path}`) ? prev : (prev.trim() ? `${prev.trim()}\n\n@${path}` : `@${path}`));
+      setSystemMessage(`Attached local file: ${res.path || path}`);
+    } catch (err) {
+      setSystemMessage(`Could not attach ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [activeThread?.id, setSystemMessage]);
 
   const openDraftWorkspace = useCallback(async (mode: DraftMode) => {
     const source = composerDraftSource(draft, composerAttachments);
@@ -1725,6 +1940,7 @@ ${script.content}
             );
           }
           if (event.event === "done") {
+            rememberAgentXLatestPatchResponse(event.content || "");
             streamedContent = event.content;
             setActiveThread((prev) =>
               prev
@@ -2323,6 +2539,8 @@ ${script.content}
     { id: "memory" as const, label: "Memory", icon: "◈", title: "Knowledge and project memory" },
     { id: "scripts" as const, label: "Scripts", icon: "◇", title: "Saved code artifacts" },
     { id: "models" as const, label: "Models", icon: "◎", title: "Model and Ollama settings" },
+    { id: "validation" as const, label: "Validate", icon: "✓", title: "Run workspace validation presets" },
+    { id: "workspaces" as const, label: "Workspaces", icon: "▣", title: "Uploaded archives and sandbox workspaces" },
     { id: "github" as const, label: "GitHub", icon: "⎇", title: "GitHub status and update controls" },
     { id: "settings" as const, label: "Settings", icon: "⋯", title: "Settings" },
   ];
@@ -2348,6 +2566,14 @@ ${script.content}
     }
     if (id === "models") {
       setActiveView("models");
+      return;
+    }
+    if (id === "validation") {
+      setActiveView("validation");
+      return;
+    }
+    if (id === "workspaces") {
+      setActiveView("workspaces");
       return;
     }
     setActiveView("settings");
@@ -2519,6 +2745,19 @@ ${script.content}
               title="Open local RAG knowledge manager"
             >
               ◈ Knowledge
+            </button>
+            <button
+              className={[
+                "w-full rounded-xl border px-3 py-2 text-left text-sm font-medium transition",
+                activeView === "workspaces" ? "border-cyan-400/30 bg-slate-900 text-cyan-50" : "border-slate-800 bg-slate-950/70 text-slate-200 hover:bg-slate-900/80",
+              ].join(" ")}
+              onClick={() => {
+                setActiveView("workspaces");
+                onAfterNavAction();
+              }}
+              title="Open uploaded archives and sandbox workspaces"
+            >
+              ▣ Workspaces
             </button>
             <button
               className={[
@@ -2725,7 +2964,9 @@ ${script.content}
                           ? "Scripts"
                           : activeView === "knowledge"
                             ? "Knowledge"
-                            : activeThread
+                            : activeView === "validation"
+                              ? "Validation"
+                              : activeThread
                             ? activeThread.title || config.threadTitleDefault
                             : "Chat"}
                       {activeProject ? <span className="text-xs font-normal text-slate-500">{` - ${activeProject.name}`}</span> : null}
@@ -2737,7 +2978,9 @@ ${script.content}
                           ? "Saved code artifacts from every AgentX generation."
                           : activeView === "knowledge"
                             ? "Ingest URLs, project folders, and game files into local RAG."
-                            : `Direct channel into ${assistantDisplayName}.`}
+                            : activeView === "validation"
+                              ? "Run safe validation presets against AgentX workspaces."
+                              : `Direct channel into ${assistantDisplayName}.`}
                     </div>
                   </div>
                 </div>
@@ -2827,6 +3070,14 @@ ${script.content}
             </div>
           ) : activeView === "knowledge" ? (
             <MemoryPage onSystemMessage={setSystemMessage} />
+          ) : activeView === "workspaces" ? (
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[1.45rem] border border-slate-800 bg-slate-950/70">
+              <iframe
+                title="AgentX Workspaces"
+                src="/workspaces.html"
+                className="h-full min-h-[72vh] w-full border-0"
+              />
+            </div>
           ) : activeView === "models" ? (
             <ModelsPage
               statusOk={statusOk}
@@ -2849,6 +3100,8 @@ ${script.content}
               onRefreshModels={() => void refreshModels()}
               onSystemMessage={setSystemMessage}
             />
+          ) : activeView === "validation" ? (
+            <ValidationPage statusOk={statusOk} onSystemMessage={setSystemMessage} />
           ) : activeView === "scripts" ? (
             renderScriptsView()
           ) : (
@@ -2970,6 +3223,13 @@ ${script.content}
                     onChange={(event) => void addComposerFiles(event.currentTarget.files, "file")}
                   />
                   <input
+                    ref={archiveInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".zip,.rar,.7z,.tar,.tgz,.tar.gz,application/zip,application/x-rar-compressed,application/x-7z-compressed"
+                    onChange={(event) => void importWorkbenchArchives(event.currentTarget.files)}
+                  />
+                  <input
                     ref={imageInputRef}
                     type="file"
                     className="hidden"
@@ -3000,6 +3260,8 @@ ${script.content}
                       {composerMenuOpen ? (
                         <div className="agentx-composer-menu">
                           <button type="button" onClick={() => { setComposerMenuOpen(false); fileInputRef.current?.click(); }}>Attach file</button>
+                          <button type="button" onClick={() => void attachAllowedPath()}>Attach @file path</button>
+                          <button type="button" onClick={() => { setComposerMenuOpen(false); archiveInputRef.current?.click(); }}>Upload server archive</button>
                           <button type="button" onClick={() => { setComposerMenuOpen(false); imageInputRef.current?.click(); }}>Attach picture</button>
                           <button type="button" onClick={() => { setComposerMenuOpen(false); insertFileSearchPrompt(); }}>Search for a file</button>
                           <button type="button" onClick={() => { setComposerMenuOpen(false); void openDraftWorkspace("open"); }}>Open as Draft</button>
