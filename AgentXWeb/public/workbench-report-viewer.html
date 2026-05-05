@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AgentX Workbench Report Viewer</title>
+  <style>
+    :root{color-scheme:dark;--bg:#020617;--panel:#0f172acc;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--warn:#fbbf24;--bad:#fb7185}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:linear-gradient(135deg,#020617,#0b1220);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+    button{cursor:pointer;border:1px solid var(--border);color:var(--text);background:#111827;border-radius:12px;padding:8px 10px;font:inherit}
+    button:hover{border-color:#22d3ee88;background:#0f1f2f}
+    button.primary{background:#0e7490;border-color:#22d3ee88;color:white;font-weight:800}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .shell{display:grid;grid-template-rows:auto minmax(0,1fr);gap:14px;height:100vh;padding:14px;overflow:hidden}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:24px;background:var(--panel);padding:14px}
+    .brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(135deg,#0e7490,#6d28d9);font-weight:900}
+    h1{margin:0;font-size:18px}.sub{color:var(--muted);font-size:12px;margin-top:2px}
+    .grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;min-height:0;overflow:hidden}
+    .panel{border:1px solid var(--border);border-radius:24px;background:var(--panel);padding:14px;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+    .panelHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}.panel h2{margin:0;font-size:15px}
+    .list{overflow:auto;min-height:0;display:grid;gap:10px;padding-right:4px}
+    .card{width:100%;text-align:left;border:1px solid var(--border);border-radius:18px;background:#020617aa;padding:12px}
+    .card.active{border-color:#22d3eeaa;background:#08334466}.title{font-weight:900;overflow-wrap:anywhere}.meta{color:var(--muted);font-size:11px;margin-top:4px;overflow-wrap:anywhere}.row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+    .pill{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:11px;white-space:nowrap}
+    .pill.ok{color:#bbf7d0;border-color:#34d39966;background:#064e3b33}.pill.warn{color:#fde68a;border-color:#fbbf2466;background:#78350f33}.pill.bad{color:#fecdd3;border-color:#fb718566;background:#7f1d1d33}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+    .metric{border:1px solid var(--border);border-radius:18px;background:#020617aa;padding:12px}.metric strong{display:block;font-size:22px;line-height:1}.metric span{display:block;color:var(--muted);font-size:11px;margin-top:5px}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+    pre{margin:0;white-space:pre-wrap;overflow:auto;min-height:0;flex:1;border:1px solid var(--border);border-radius:18px;padding:12px;background:#020617e0;color:#dbeafe;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5}
+    .empty{color:var(--muted);border:1px dashed var(--border);border-radius:18px;padding:18px;text-align:center}
+    @media(max-width:1100px){.shell{height:auto;overflow:auto}.grid{grid-template-columns:1fr}.panel{min-height:380px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand"><div class="logo">AX</div><div><h1>AgentX Workbench Report Viewer</h1><div class="sub">V12 workspace analysis, report, inventory, and download console.</div></div></div>
+      <div class="row"><button onclick="location.href=\x27/workspaces.html\x27">▣ Workspaces</button><button class="primary" id="refreshBtn">Refresh</button></div>
+    </header>
+    <main class="grid">
+      <section class="panel"><div class="panelHeader"><div><h2>Uploads</h2><div class="sub">Select an imported archive workspace.</div></div></div><div id="uploads" class="list"></div></section>
+      <section class="panel">
+        <div class="panelHeader"><div><h2 id="detailTitle">Report</h2><div id="detailSub" class="sub">No workspace selected.</div></div><span id="statePill" class="pill">idle</span></div>
+        <div class="metrics"><div class="metric"><strong id="mFiles">-</strong><span>files</span></div><div class="metric"><strong id="mSyntax">-</strong><span>syntax findings</span></div><div class="metric"><strong id="mRisk">-</strong><span>risk findings</span></div><div class="metric"><strong id="mStub">-</strong><span>stub/TODO findings</span></div></div>
+        <div class="actions"><button id="copyReportPathBtn" disabled>Copy report path</button><button id="copySummaryBtn" disabled>Copy summary</button><button id="downloadReportBtn" disabled>Download report</button><button id="downloadInventoryBtn" disabled>Download inventory</button><button id="openJsonBtn" disabled>Open inventory JSON</button></div>
+        <pre id="report">Select a workspace to load its final report.</pre>
+      </section>
+    </main>
+  </div>
+  <script src="/agentxweb.config.js"></script>
+  <script>
+    const cfg=window.AGENTX_WEB_CONFIG||window.__AGENTXWEB_CONFIG__||{};
+    const apiBase=String(cfg.apiBase||window.location.origin.replace(":5173",":8000").replace(":5174",":8000")).replace(/\/$/,"");
+    const uploadsEl=document.getElementById("uploads"),reportEl=document.getElementById("report"),statePill=document.getElementById("statePill"),detailTitle=document.getElementById("detailTitle"),detailSub=document.getElementById("detailSub");
+    const mFiles=document.getElementById("mFiles"),mSyntax=document.getElementById("mSyntax"),mRisk=document.getElementById("mRisk"),mStub=document.getElementById("mStub");
+    const copyReportPathBtn=document.getElementById("copyReportPathBtn"),copySummaryBtn=document.getElementById("copySummaryBtn"),downloadReportBtn=document.getElementById("downloadReportBtn"),downloadInventoryBtn=document.getElementById("downloadInventoryBtn"),openJsonBtn=document.getElementById("openJsonBtn");
+    let uploads=[],selected=null;
+    function setState(text,kind=""){statePill.textContent=text;statePill.className=["pill",kind].filter(Boolean).join(" ")}
+    function fmtDate(ts){const n=Number(ts);return Number.isFinite(n)?new Date(n*1000).toLocaleString():"unknown"}
+    function summaryValue(upload,key){const value=upload?.summary?.[key];return value===null||value===undefined||value===""?"-":String(value)}
+    async function api(path){const res=await fetch(apiBase+path);if(!res.ok)throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);return res.json()}
+    function renderUploads(){uploadsEl.innerHTML="";if(!uploads.length){uploadsEl.innerHTML="<div class=\"empty\">No imported workspaces found yet.</div>";return}for(const upload of uploads){const btn=document.createElement("button");btn.type="button";btn.className="card"+(selected?.project_id===upload.project_id?" active":"");btn.innerHTML=`<div class="title">▣ ${upload.project_id}</div><div class="meta">${upload.original_archive||"archive unknown"}</div><div class="row" style="margin-top:8px"><span class="pill ok">${summaryValue(upload,"total_files")} files</span><span class="pill ${Number(summaryValue(upload,"syntax_errors"))?"bad":"ok"}">${summaryValue(upload,"syntax_errors")} syntax</span><span class="pill ${Number(summaryValue(upload,"risk_findings"))?"warn":"ok"}">${summaryValue(upload,"risk_findings")} risk</span></div><div class="meta">Updated ${fmtDate(upload.created_at)}</div>`;btn.onclick=()=>selectUpload(upload);uploadsEl.appendChild(btn)}}
+    async function loadUploads(){setState("loading","warn");uploadsEl.innerHTML="<div class=\"empty\">Loading workspaces...</div>";try{const data=await api("/v1/workbench/uploads");uploads=data.uploads||[];renderUploads();setState("ready","ok")}catch(err){uploadsEl.innerHTML=`<div class="empty">Failed to load uploads: ${String(err.message||err)}</div>`;setState("error","bad")}}
+    async function selectUpload(upload){selected=upload;renderUploads();detailTitle.textContent=upload.project_id;detailSub.textContent=upload.workspace_path||"workspace path unknown";mFiles.textContent=summaryValue(upload,"total_files");mSyntax.textContent=summaryValue(upload,"syntax_errors");mRisk.textContent=summaryValue(upload,"risk_findings");mStub.textContent=summaryValue(upload,"stub_findings");copyReportPathBtn.disabled=false;copySummaryBtn.disabled=false;downloadReportBtn.disabled=false;downloadInventoryBtn.disabled=false;openJsonBtn.disabled=false;reportEl.textContent="Loading final_report.md...";setState("loading report","warn");try{const loadedReport=await api(`/v1/workbench/uploads/${encodeURIComponent(upload.project_id)}/report`);reportEl.textContent=loadedReport.content||"(empty report)";setState("report loaded","ok")}catch(err){reportEl.textContent=`Report failed to load:\n${String(err.message||err)}`;setState("report error","bad")}}
+    function download(path){if(!selected)return;window.open(apiBase+path,"_blank","noopener,noreferrer")}
+    copyReportPathBtn.onclick=async()=>{if(!selected)return;await navigator.clipboard.writeText(selected.report_path||"");setState("copied path","ok")};
+    copySummaryBtn.onclick=async()=>{if(!selected)return;const text=[`AgentX workspace: ${selected.project_id}`,`files: ${summaryValue(selected,"total_files")}`,`syntax: ${summaryValue(selected,"syntax_errors")}`,`risk: ${summaryValue(selected,"risk_findings")}`,`stubs: ${summaryValue(selected,"stub_findings")}`,`report: ${selected.report_path}`].join("\n");await navigator.clipboard.writeText(text);setState("copied summary","ok")};
+    downloadReportBtn.onclick=()=>selected&&download(`/v1/workbench/uploads/${encodeURIComponent(selected.project_id)}/download/report`);
+    downloadInventoryBtn.onclick=()=>selected&&download(`/v1/workbench/uploads/${encodeURIComponent(selected.project_id)}/download/inventory`);
+    openJsonBtn.onclick=()=>selected&&window.open(apiBase+`/v1/workbench/uploads/${encodeURIComponent(selected.project_id)}/inventory`,"_blank","noopener,noreferrer");
+    document.getElementById("refreshBtn").onclick=loadUploads;loadUploads();
+  </script>
+</body>
+</html>

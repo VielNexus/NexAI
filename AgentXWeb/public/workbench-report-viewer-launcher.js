@@ -74,6 +74,7 @@
     const link = document.createElement("a");
     link.className = "agentx-v12-report-viewer-launcher";
     link.href = "/workbench-report-viewer.html";
+    link.target = "_top";
     link.title = "Open the V12 Workbench Report Viewer";
     link.innerHTML = `
       <span class="agentx-v12-report-viewer-launcher__icon">↗</span>
