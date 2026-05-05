@@ -57,6 +57,7 @@ import { KnowledgePage } from "./pages/KnowledgePage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { ValidationPage } from "./pages/ValidationPage";
+import { HealthPage } from "./pages/HealthPage";
 import { clearAuth, loadAuth, logout, tryLogin, type AuthState } from "./auth";
 import { ChatMessage } from "./components/ChatMessage";
 import { BrandBadge } from "./components/BrandBadge";
@@ -477,7 +478,7 @@ function messageScriptTitle(thread: Thread | null, messageId: string, fallback =
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(() => loadAuth());
   const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
-  const [activeView, setActiveView] = useState<"chat" | "settings" | "customization" | "scripts" | "knowledge" | "models" | "validation" | "workspaces">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "settings" | "customization" | "scripts" | "knowledge" | "models" | "health" | "validation" | "workspaces">("chat");
   const [activeDeckMode, setActiveDeckMode] = useState<DeckModeId>("command");
   const [deckLayoutPrefs, setDeckLayoutPrefs] = useState(() => ({
     showModeRail: window.localStorage.getItem("agentx.deck.showModeRail") !== "false",
@@ -2539,6 +2540,7 @@ function rememberAgentXLatestPatchResponse(content: string) {
     { id: "memory" as const, label: "Memory", icon: "◈", title: "Knowledge and project memory" },
     { id: "scripts" as const, label: "Scripts", icon: "◇", title: "Saved code artifacts" },
     { id: "models" as const, label: "Models", icon: "◎", title: "Model and Ollama settings" },
+    { id: "health" as const, label: "Health", icon: "✦", title: "System health and runtime diagnostics" },
     { id: "validation" as const, label: "Validate", icon: "✓", title: "Run workspace validation presets" },
     { id: "workspaces" as const, label: "Workspaces", icon: "▣", title: "Uploaded archives and sandbox workspaces" },
     { id: "github" as const, label: "GitHub", icon: "⎇", title: "GitHub status and update controls" },
@@ -2566,6 +2568,10 @@ function rememberAgentXLatestPatchResponse(content: string) {
     }
     if (id === "models") {
       setActiveView("models");
+      return;
+    }
+    if (id === "health") {
+      setActiveView("health");
       return;
     }
     if (id === "validation") {
@@ -3100,6 +3106,8 @@ function rememberAgentXLatestPatchResponse(content: string) {
               onRefreshModels={() => void refreshModels()}
               onSystemMessage={setSystemMessage}
             />
+          ) : activeView === "health" ? (
+            <HealthPage statusOk={statusOk} onSystemMessage={setSystemMessage} />
           ) : activeView === "validation" ? (
             <ValidationPage statusOk={statusOk} onSystemMessage={setSystemMessage} />
           ) : activeView === "scripts" ? (
