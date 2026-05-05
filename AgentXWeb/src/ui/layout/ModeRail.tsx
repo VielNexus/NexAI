@@ -1,6 +1,6 @@
 import React from "react";
 
-export type DeckModeId = "command" | "drafts" | "memory" | "scripts" | "models" | "github" | "settings";
+export type DeckModeId = "command" | "drafts" | "memory" | "scripts" | "models" | "validation" | "workspaces" | "github" | "settings";
 
 export type DeckMode = {
   id: DeckModeId;

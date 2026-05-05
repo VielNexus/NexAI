@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import { tokens } from "../tokens";
+import { copyTextToClipboard } from "../clipboard";
 
 type Props = {
   code: string;
@@ -17,12 +18,8 @@ export function CodeBlock({ code, language }: Props) {
   }, [copied]);
 
   const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyTextToClipboard(code);
+    setCopied(ok);
   };
 
   return (

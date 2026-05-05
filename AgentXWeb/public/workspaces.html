@@ -1,0 +1,1472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentX Workspaces</title>
+  <style>
+    :root { color-scheme: dark; --bg:#020617; --panel:#0f172a; --panel2:#111827; --border:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#22d3ee; --bad:#fb7185; --ok:#34d399; --warn:#fbbf24; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:linear-gradient(135deg,#020617,#0b1220); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+    button, input, textarea, select { font: inherit; }
+    button { cursor:pointer; border:1px solid var(--border); color:var(--text); background:#111827; border-radius:12px; padding:8px 10px; }
+    button:hover { border-color:#155e75; background:#0f1f2f; }
+    button.primary { background:#0e7490; border-color:#22d3ee55; color:white; }
+    button.danger { background:#3f111c; border-color:#fb718555; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    input, textarea { background:#020617; color:var(--text); border:1px solid var(--border); border-radius:12px; padding:9px 10px; width:100%; }
+    textarea { min-height:260px; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.45; }
+    .shell { display:grid; grid-template-columns: 320px 360px minmax(0,1fr); gap:12px; height:100vh; padding:12px; overflow:hidden; }
+    .panel { background:rgba(15,23,42,.78); border:1px solid var(--border); border-radius:22px; padding:12px; min-height:0; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 60px #0005; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .title { font-weight:800; letter-spacing:.02em; }
+    .sub { color:var(--muted); font-size:12px; line-height:1.35; }
+    .list { overflow:auto; min-height:0; display:grid; gap:8px; padding-right:4px; }
+    .card { text-align:left; border:1px solid var(--border); border-radius:16px; padding:10px; background:#020617aa; }
+    .card.active { border-color:#22d3ee88; background:#08334466; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .pill { border:1px solid var(--border); border-radius:999px; padding:3px 7px; font-size:11px; color:var(--muted); }
+    .pill.ok { color:#bbf7d0; border-color:#34d39955; }
+    .pill.warn { color:#fde68a; border-color:#fbbf2455; }
+    .pill.bad { color:#fecdd3; border-color:#fb718555; }
+    .treeItem { display:block; width:100%; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; }
+    .treeItem.dir { color:#93c5fd; }
+    .treeItem.file { color:#e5e7eb; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; min-height:0; }
+    .main { display:grid; grid-template-rows: auto minmax(0,1fr) auto; gap:10px; min-height:0; }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+    .tab.active { border-color:#22d3ee88; background:#083344; }
+    pre { margin:0; white-space:pre-wrap; overflow:auto; background:#020617; border:1px solid var(--border); border-radius:14px; padding:10px; min-height:260px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.45; }
+    .diff { overflow:auto; background:#020617; border:1px solid var(--border); border-radius:14px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.45; }
+    .diff .add { color:#bbf7d0; background:#064e3b55; display:block; }
+    .diff .del { color:#fecdd3; background:#7f1d1d55; display:block; }
+    .diff .same { color:#94a3b8; display:block; }
+    .footer { color:var(--muted); font-size:12px; }
+    .hidden { display:none !important; }
+    @media (max-width: 1100px) { .shell { grid-template-columns: 1fr; height:auto; overflow:auto; } .panel { min-height:320px; } }
+  </style>
+
+<style id="agentx-readable-file-tree">
+  .file-row,
+  .tree-row,
+  .workspace-file-row {
+    min-height: 42px !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    overflow: visible !important;
+  }
+
+  .file-row button,
+  .tree-row button,
+  .workspace-file-row button {
+    min-height: 38px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.25 !important;
+  }
+
+  .file-name,
+  .tree-file-name,
+  .workspace-file-name {
+    display: block !important;
+    color: #e5f6ff !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .file-path,
+  .tree-file-path,
+  .workspace-file-path {
+    display: block !important;
+    color: #7f91aa !important;
+    font-size: 10px !important;
+    margin-top: 2px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #fileTree,
+  .file-tree,
+  .workspace-tree {
+    overflow-x: auto !important;
+  }
+
+  #fileTree button,
+  .file-tree button,
+  .workspace-tree button {
+    width: 100% !important;
+    text-align: left !important;
+  }
+</style>
+
+
+<style id="agentx-file-tree-final-fix">
+  #fileTree {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 7px !important;
+    overflow-x: hidden !important;
+  }
+
+  #fileTree button {
+    display: grid !important;
+    grid-template-columns: 22px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    align-items: start !important;
+    width: 100% !important;
+    min-height: 48px !important;
+    height: auto !important;
+    padding: 8px 10px !important;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    color: #eaf7ff !important;
+  }
+
+  #fileTree .tree-name {
+    display: block !important;
+    color: #f1fbff !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #fileTree .tree-dir {
+    display: block !important;
+    color: #8fa3bd !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    margin-top: 3px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #fileTree .tree-icon {
+    color: #d7edff !important;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    padding-top: 1px !important;
+  }
+</style>
+
+
+<style id="agentx-real-tree-render-css">
+  #tree {
+    overflow-x: hidden !important;
+  }
+
+  #tree .treeItem {
+    display: grid !important;
+    grid-template-columns: 22px minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-height: 48px !important;
+    height: auto !important;
+    padding: 8px 10px !important;
+    white-space: normal !important;
+    text-align: left !important;
+    overflow: visible !important;
+  }
+
+  #tree .treeIcon {
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    opacity: 0.9 !important;
+  }
+
+  #tree .treeText {
+    min-width: 0 !important;
+    display: block !important;
+  }
+
+  #tree .treeName {
+    display: block !important;
+    color: #f1fbff !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #tree .treeDir {
+    display: block !important;
+    color: #8fa3bd !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    margin-top: 3px !important;
+    overflow-wrap: anywhere !important;
+  }
+</style>
+\n
+<style id="agentx-validation-ui-css">
+  #validationBox {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(15, 23, 42, 0.72);
+    border-radius: 14px;
+    padding: 10px;
+    color: #dbeafe;
+    font-size: 12px;
+    overflow: auto;
+    max-height: 180px;
+    white-space: pre-wrap;
+  }
+  #validationBox.ok { border-color: rgba(16, 185, 129, 0.45); background: rgba(6, 78, 59, 0.20); }
+  #validationBox.bad { border-color: rgba(244, 63, 94, 0.50); background: rgba(127, 29, 29, 0.22); }
+  #validationBox.skip { border-color: rgba(245, 158, 11, 0.45); background: rgba(120, 53, 15, 0.22); }
+</style>
+
+
+<style id="agentx-ask-fix-css">
+  #askFixBtn {
+    border-color: rgba(34,211,238,.35) !important;
+    background: rgba(8,145,178,.16) !important;
+    color: #dffbff !important;
+    font-weight: 700 !important;
+  }
+  #askFixBtn:disabled {
+    opacity: .45 !important;
+    background: rgba(15,23,42,.55) !important;
+    color: #7f91aa !important;
+  }
+</style>
+
+
+<style id="agentx-auto-patch-bridge-css">
+  #importAgentPatchBtn {
+    border-color: rgba(56, 189, 248, 0.35) !important;
+  }
+</style>
+
+
+<style id="agentx-patch-history-css">
+  .historyCard {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.72);
+    padding: 10px;
+    text-align: left;
+    color: #dbeafe;
+    margin-bottom: 8px;
+  }
+  .historyCard strong { color: #f1f5f9; }
+  .historyMeta { color: #8fa3bd; font-size: 11px; margin-top: 4px; overflow-wrap: anywhere; }
+  .historyActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .historyActions button { width: auto !important; }
+</style>
+
+</head>
+<body>
+  <div class="shell">
+    <section class="panel">
+      <div class="header">
+        <div>
+          <div class="title">Workspaces</div>
+          <div class="sub">Uploaded archives and sandbox imports.</div>
+        </div>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+      <div id="uploads" class="list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="header">
+        <div>
+          <div class="title">File Tree</div>
+          <div id="workspaceSub" class="sub">Select a workspace.</div>
+        </div>
+      </div>
+      <input id="treeFilter" placeholder="Filter files, e.g. rope.py or config" />
+      <div style="height:10px"></div>
+      <div id="tree" class="list"></div>
+    </section>
+
+    <section class="panel main">
+      <div>
+        <div class="header">
+          <div>
+            <div id="fileTitle" class="title">File Inspector</div>
+            <div id="fileSub" class="sub">Open a file to inspect, compare, patch, and apply sandbox-only edits.</div>
+          </div>
+          <div class="row">
+            <button id="askFixBtn" disabled>Ask AgentX to fix</button>
+            <button id="reportBtn" disabled>Report</button>
+            <button id="exportBtn" disabled>Export ZIP</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="tab active" data-tab="view">View</button>
+          <button class="tab" data-tab="patch">Patch Preview</button>
+          <button class="tab" data-tab="compare">Compare Source</button>
+          <button class="tab" data-tab="report">Report</button>
+          <button class="tab" data-tab="history">History</button>
+        </div>
+      </div>
+
+      <div style="min-height:0; overflow:hidden;">
+        <div id="tab-view" class="tabPane" style="height:100%; display:flex; flex-direction:column; gap:8px;">
+          <pre id="fileContent">No file selected.</pre>
+        </div>
+
+        <div id="tab-patch" class="tabPane hidden" style="height:100%; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:8px;">
+          <div class="sub">Edit the proposed content below, preview the diff, then apply only to the sandbox workspace.</div>
+          <div class="grid2">
+            <textarea id="proposedContent" placeholder="Proposed replacement content"></textarea>
+            <div id="diffPreview" class="diff">No diff yet.</div>
+          </div>
+          <div class="row">
+            <button id="copyCurrentBtn" disabled>Copy current to proposal</button>
+            <button id="previewDiffBtn" disabled>Preview diff</button>
+            <button id="validatePatchBtn" disabled>Validate proposal</button>
+            <button id="importAgentPatchBtn" disabled>Import AgentX patch</button>
+            <button id="applyPatchBtn" class="primary" disabled>Apply to sandbox</button>
+          </div>
+          <div id="validationBox" class="skip">No validation run yet.</div>
+        </div>
+
+        <div id="tab-compare" class="tabPane hidden" style="height:100%; display:grid; grid-template-rows:auto auto minmax(0,1fr); gap:8px;">
+          <div class="sub">Find likely matching source files by basename, then open one beside the current file.</div>
+          <div class="row"><button id="findMatchesBtn" disabled>Find matching source candidates</button></div>
+          <div class="grid2">
+            <div><div class="sub">Candidates</div><div id="matches" class="list" style="max-height:60vh"></div></div>
+            <div><div class="sub">Selected source</div><pre id="matchContent">No source selected.</pre></div>
+          </div>
+        </div>
+
+        <div id="tab-report" class="tabPane hidden" style="height:100%;"><pre id="reportContent">No report loaded.</pre></div>
+
+        <div id="tab-history" class="tabPane hidden" style="height:100%; display:grid; grid-template-rows:auto minmax(0,1fr); gap:8px;">
+          <div class="row">
+            <button id="refreshHistoryBtn">Refresh history</button>
+            <span class="sub">Sandbox patch history and rollback for this uploaded workspace.</span>
+          </div>
+          <div id="patchHistory" class="list" style="max-height:70vh; overflow:auto;"><div class="sub">No patch history loaded.</div></div>
+        </div>
+      </div>
+
+      <div id="status" class="footer">Ready.</div>
+    </section>
+  </div>
+
+<script>
+const apiBase = (() => {
+  const stored = localStorage.getItem('agentx.apiBase');
+  return stored || `${location.protocol}//${location.hostname}:8000`;
+})();
+const state = { uploads: [], selected: null, tree: [], file: null, report: '', currentTab: 'view' };
+const $ = (id) => document.getElementById(id);
+function status(msg) { $('status').textContent = msg; }
+async function api(path, opts = {}) {
+  const res = await fetch(`${apiBase}${path}`, opts);
+  if (!res.ok) {
+    let detail = await res.text();
+    try { detail = JSON.parse(detail).detail || detail; } catch {}
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json();
+}
+function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function fmtTime(ts) { if (!ts) return 'unknown'; return new Date(ts * 1000).toLocaleString(); }
+function uploadArray(payload) { return Array.isArray(payload) ? payload : (payload.uploads || payload.items || payload.projects || []); }
+async function loadUploads() {
+  status('Loading workspaces...');
+  try {
+    const data = await api('/v1/workbench/uploads');
+    state.uploads = uploadArray(data);
+    renderUploads();
+    status(`Loaded ${state.uploads.length} workspace(s).`);
+  } catch (e) { status(`Failed to load workspaces: ${e.message}`); }
+}
+function renderUploads() {
+  const root = $('uploads'); root.innerHTML = '';
+  if (!state.uploads.length) { root.innerHTML = '<div class="sub">No uploaded workspaces found.</div>'; return; }
+  for (const u of state.uploads) {
+    const id = u.project_id || u.id || u.name || (u.workspace_path || '').split('/').pop();
+    const summary = u.summary || {};
+    const btn = document.createElement('button');
+    btn.className = 'card' + (state.selected && (state.selected.project_id || state.selected.id) === id ? ' active' : '');
+    btn.innerHTML = `<div><strong>${esc(id)}</strong></div>
+      <div class="sub">${esc(u.original_archive || u.archive_name || '')}</div>
+      <div class="row" style="margin-top:8px">
+        <span class="pill ok">files ${summary.total_files ?? u.total_files ?? '?'}</span>
+        <span class="pill warn">syntax ${summary.syntax_errors ?? '?'}</span>
+        <span class="pill bad">risk ${summary.risk_findings ?? '?'}</span>
+      </div>
+      <div class="sub" style="margin-top:6px">thread ${esc((u.thread_id || 'unlinked').slice(0, 12))} · ${fmtTime(u.attached_at || u.created_at)}</div>`;
+    btn.onclick = () => selectUpload(u);
+    root.appendChild(btn);
+  }
+}
+async function selectUpload(u) {
+  state.selected = u; state.file = null; state.tree = [];
+  $('workspaceSub').textContent = u.project_id || u.id || 'selected workspace';
+  $('fileTitle').textContent = 'File Inspector'; $('fileContent').textContent = 'Select a file.'; $('proposedContent').value = ''; $('diffPreview').innerHTML = 'No diff yet.';
+  $('reportBtn').disabled = false; $('exportBtn').disabled = !u.thread_id; if ($('askFixBtn')) $('askFixBtn').disabled = true;
+  renderUploads();
+  await loadTree();
+}
+async function loadTree() {
+  const u = state.selected; if (!u) return;
+  status('Loading file tree...');
+  try {
+    let data;
+    if (u.thread_id) data = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/tree`);
+    else data = await api(`/v1/workbench/uploads/${encodeURIComponent(u.project_id || u.id)}/tree`);
+    state.tree = data.entries || data.files || [];
+    renderTree();
+    status(`Loaded ${state.tree.length} tree entries.`);
+  } catch (e) { status(`Failed to load tree: ${e.message}`); }
+}
+function splitTreePath(path) {
+  const normalized = String(path || '').replaceAll('\\\\', '/');
+  const parts = normalized.split('/').filter(Boolean);
+  const name = parts.pop() || normalized || '(unknown)';
+  const dir = parts.length ? parts.join('/') + '/' : '';
+  return { name, dir, normalized };
+}
+
+function renderTree() {
+  const filter = $('treeFilter').value.toLowerCase().trim();
+  const root = $('tree'); root.innerHTML = '';
+  const items = state.tree.filter(x => !filter || String(x.path || '').toLowerCase().includes(filter)).slice(0, 2000);
+  if (!items.length) { root.innerHTML = '<div class="sub">No matching files.</div>'; return; }
+
+  for (const item of items) {
+    const path = item.path || '';
+    const isDir = item.type === 'dir' || item.is_dir;
+    const split = splitTreePath(path);
+
+    const btn = document.createElement('button');
+    btn.className = `treeItem ${isDir ? 'dir' : 'file'}`;
+    btn.title = path;
+    btn.disabled = isDir;
+    btn.onclick = () => openFile(path);
+
+    btn.innerHTML = `
+      <span class="treeIcon">${isDir ? '📁' : '📄'}</span>
+      <span class="treeText">
+        <span class="treeName">${esc(split.name)}</span>
+        <span class="treeDir">${esc(split.dir)}</span>
+      </span>
+    `;
+
+    root.appendChild(btn);
+  }
+}
+async function openFile(path) {
+  const u = state.selected; if (!u || !u.thread_id) { status('This workspace is not linked to a thread.'); return; }
+  status(`Opening ${path}...`);
+  try {
+    const data = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/file?path=${encodeURIComponent(path)}`);
+    state.file = data;
+    $('fileTitle').textContent = path;
+    $('fileSub').textContent = `${data.size ?? 0} bytes${data.truncated ? ' · truncated' : ''}`;
+    $('fileContent').textContent = data.content || '';
+    $('proposedContent').value = data.content || '';
+    $('copyCurrentBtn').disabled = false; $('previewDiffBtn').disabled = false; $('applyPatchBtn').disabled = false; if ($('validatePatchBtn')) $('validatePatchBtn').disabled = false; if ($('importAgentPatchBtn')) $('importAgentPatchBtn').disabled = false; $('findMatchesBtn').disabled = false; if ($('validationBox')) { $('validationBox').className = 'skip'; $('validationBox').textContent = 'No validation run yet.'; } if ($('askFixBtn')) $('askFixBtn').disabled = false;
+    switchTab('view');
+    status(`Opened ${path}.`); if (typeof agentxScheduleAutoPatchImport === 'function') agentxScheduleAutoPatchImport();
+  } catch (e) { status(`Failed to open file: ${e.message}`); }
+}
+function makeDiff(a, b) {
+  const A = String(a ?? '').split('\n'); const B = String(b ?? '').split('\n');
+  let out = [`--- current/${state.file?.path || 'file'}`, `+++ proposed/${state.file?.path || 'file'}`, '@@ preview @@'];
+  const max = Math.max(A.length, B.length);
+  for (let i=0; i<max; i++) {
+    if (A[i] === B[i]) out.push(`<span class="same"> ${esc(A[i] ?? '')}</span>`);
+    else {
+      if (A[i] !== undefined) out.push(`<span class="del">-${esc(A[i])}</span>`);
+      if (B[i] !== undefined) out.push(`<span class="add">+${esc(B[i])}</span>`);
+    }
+  }
+  return out.join('\n');
+}
+function previewDiff() { if (!state.file) return; $('diffPreview').innerHTML = makeDiff(state.file.content || '', $('proposedContent').value || ''); }
+
+function renderValidationResult(result) {
+  const box = $('validationBox');
+  if (!box) return;
+  box.className = result.ok === true ? 'ok' : result.ok === false ? 'bad' : 'skip';
+  const lines = [];
+  lines.push(result.message || (result.ok === true ? 'Validation passed.' : result.ok === false ? 'Validation failed.' : 'Validation skipped.'));
+  if (result.path) lines.push(`File: ${result.path}`);
+  if (result.language) lines.push(`Type: ${result.language}`);
+  for (const check of result.checks || []) {
+    lines.push('');
+    lines.push(`Check: ${check.name || 'validator'}`);
+    lines.push(`Status: ${check.ok === true ? 'pass' : check.ok === false ? 'fail' : 'skipped'}`);
+    if (check.command && check.command.length) lines.push(`Command: ${check.command.join(' ')}`);
+    if (check.stdout) lines.push(`stdout:\n${check.stdout}`);
+    if (check.stderr) lines.push(`stderr:\n${check.stderr}`);
+  }
+  box.textContent = lines.join('\n');
+}
+
+async function validateProposal() {
+  const u = state.selected, f = state.file;
+  if (!u?.thread_id || !f?.path) return null;
+  status(`Validating proposal for ${f.path}...`);
+  try {
+    const result = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/validate`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path: f.path, content: $('proposedContent').value})
+    });
+    renderValidationResult(result);
+    status(result.message || 'Validation complete.');
+    return result;
+  } catch (e) {
+    const result = {ok: false, message: `Validation request failed: ${e.message}`, checks: []};
+    renderValidationResult(result);
+    status(result.message);
+    return result;
+  }
+}
+
+async function validateCurrentFile() {
+  const u = state.selected, f = state.file;
+  if (!u?.thread_id || !f?.path) return null;
+  status(`Validating current sandbox file ${f.path}...`);
+  try {
+    const result = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/validate`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path: f.path})
+    });
+    renderValidationResult(result);
+    status(result.message || 'Validation complete.');
+    return result;
+  } catch (e) {
+    const result = {ok: false, message: `Validation request failed: ${e.message}`, checks: []};
+    renderValidationResult(result);
+    status(result.message);
+    return result;
+  }
+}
+
+async function applyPatch() {
+  const u = state.selected, f = state.file; if (!u?.thread_id || !f?.path) return;
+  if (!confirm(`Apply replacement content to sandbox file?\n\n${f.path}\n\nA backend backup is created when the file exists.`)) return;
+  status(`Applying sandbox edit to ${f.path}...`);
+  try {
+    await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/file`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path: f.path, content: $('proposedContent').value})
+    });
+    await openFile(f.path);
+    await validateCurrentFile();
+    status(`Applied sandbox edit to ${f.path} and validation finished.`);
+  } catch (e) { status(`Apply failed: ${e.message}`); }
+}
+function basenameNoExt(path) { const name = String(path).split('/').pop() || ''; return name.replace(/\.[^.]+$/, '').toLowerCase(); }
+function findMatches() {
+  const f = state.file; if (!f) return;
+  const base = basenameNoExt(f.path);
+  const candidates = state.tree.filter(x => (x.type === 'file' || !x.type) && basenameNoExt(x.path) === base && x.path !== f.path)
+    .sort((a,b) => String(a.path).localeCompare(String(b.path))).slice(0, 100);
+  const root = $('matches'); root.innerHTML = '';
+  if (!candidates.length) { root.innerHTML = '<div class="sub">No candidates found.</div>'; return; }
+  for (const c of candidates) {
+    const btn = document.createElement('button'); btn.className = 'treeItem file'; btn.textContent = c.path; btn.onclick = () => openMatch(c.path); root.appendChild(btn);
+  }
+}
+async function openMatch(path) {
+  const u = state.selected; if (!u?.thread_id) return;
+  try { const data = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/file?path=${encodeURIComponent(path)}`); $('matchContent').textContent = data.content || ''; status(`Opened source candidate ${path}.`); }
+  catch (e) { status(`Failed to open source candidate: ${e.message}`); }
+}
+async function loadReport() {
+  const u = state.selected; if (!u) return;
+  try {
+    let data = u.thread_id ? await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/report`) : await api(`/v1/workbench/uploads/${encodeURIComponent(u.project_id || u.id)}/report`);
+    state.report = data.content || ''; $('reportContent').textContent = state.report || 'No report content.'; switchTab('report'); status('Report loaded.');
+  } catch (e) { status(`Failed to load report: ${e.message}`); }
+}
+async function exportZip() {
+  const u = state.selected; if (!u?.thread_id) return;
+  try { const data = await api(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/export`); status(`Export created: ${data.path || data.export_path || JSON.stringify(data)}`); }
+  catch (e) { status(`Export failed: ${e.message}`); }
+}
+function switchTab(tab) {
+  state.currentTab = tab;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  document.querySelectorAll('.tabPane').forEach(x => x.classList.add('hidden'));
+  $(`tab-${tab}`).classList.remove('hidden');
+}
+document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
+$('refreshBtn').onclick = loadUploads; $('treeFilter').oninput = renderTree; $('previewDiffBtn').onclick = previewDiff; $('copyCurrentBtn').onclick = () => { if (state.file) $('proposedContent').value = state.file.content || ''; previewDiff(); };
+$('applyPatchBtn').onclick = applyPatch; $('findMatchesBtn').onclick = () => { switchTab('compare'); findMatches(); }; $('reportBtn').onclick = loadReport; $('exportBtn').onclick = exportZip;
+
+function compactForPrompt(value, maxChars = 14000) {
+  const text = String(value || '');
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + `\n\n[TRUNCATED: ${text.length - maxChars} more characters omitted by Workspaces UI]`;
+}
+
+function likelySourceCandidatesForCurrentFile(limit = 20) {
+  const f = state.file;
+  if (!f?.path) return [];
+  const base = basenameNoExt(f.path);
+  return state.tree
+    .filter(x => (x.type === 'file' || !x.type) && basenameNoExt(x.path) === base && x.path !== f.path)
+    .sort((a, b) => String(a.path).localeCompare(String(b.path)))
+    .slice(0, limit)
+    .map(x => x.path);
+}
+
+function buildAskAgentXFixPrompt() {
+  const u = state.selected;
+  const f = state.file;
+  if (!u || !f?.path) return '';
+  const validation = $('validationBox') ? $('validationBox').textContent : '';
+  const candidates = likelySourceCandidatesForCurrentFile(20);
+  const proposed = $('proposedContent') ? $('proposedContent').value : '';
+  const current = f.content || '';
+  const projectId = u.project_id || u.id || 'unknown-workspace';
+  const threadId = u.thread_id || 'unlinked';
+
+  return [
+    'Use the uploaded archive workspace attached to this thread.',
+    'Task: fix the selected file using a sandbox-only patch proposal.',
+    '',
+    `Workspace project: ${projectId}`,
+    `Workspace thread: ${threadId}`,
+    `Target file: ${f.path}`,
+    '',
+    'Rules:',
+    '- Do not claim you cannot access the uploaded archive.',
+    '- Do not edit live server files.',
+    '- Use the extracted sandbox workspace only.',
+    '- Base file-specific claims on the exact file content below.',
+    '- Prefer a minimal, reviewable patch.',
+    '- Explain why the validation failed or passed.',
+    '- Return the proposed replacement content or a unified diff.',
+    '',
+    'Current file content:',
+    '```',
+    compactForPrompt(current),
+    '```',
+    '',
+    proposed && proposed !== current ? 'Current proposal text from Patch Preview:' : '',
+    proposed && proposed !== current ? '```' : '',
+    proposed && proposed !== current ? compactForPrompt(proposed) : '',
+    proposed && proposed !== current ? '```' : '',
+    proposed && proposed !== current ? '' : '',
+    validation ? 'Latest validation output:' : '',
+    validation ? '```text' : '',
+    validation ? compactForPrompt(validation, 6000) : '',
+    validation ? '```' : '',
+    validation ? '' : '',
+    candidates.length ? 'Likely matching source candidates from the same workspace:' : '',
+    ...candidates.map(path => `- ${path}`),
+    candidates.length ? '' : '',
+    'Please inspect the candidate source if needed, then propose the safest sandbox patch and validation command.'
+  ].filter((line) => line !== '').join('\n');
+}
+
+async function askAgentXToFixFile() {
+  const f = state.file;
+  if (!f?.path) { status('Open a file first.'); return; }
+  const prompt = buildAskAgentXFixPrompt();
+  if (!prompt.trim()) { status('Could not build fix prompt.'); return; }
+
+  try {
+    window.parent?.postMessage({ type: 'agentx:ask-fix-file', path: f.path, prompt }, window.location.origin);
+    status(`Loaded fix request into AgentX chat composer for ${f.path}.`);
+  } catch (err) {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      status('Could not message parent shell, so the fix prompt was copied to clipboard. Paste it into chat.');
+    } catch (copyErr) {
+      status(`Failed to send/copy fix prompt: ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`);
+    }
+  }
+}
+
+if ($('validatePatchBtn')) $('validatePatchBtn').onclick = () => void validateProposal();
+if ($('importAgentPatchBtn')) $('importAgentPatchBtn').onclick = () => void agentxAutoImportPatchFromChat(true);
+if ($('askFixBtn')) $('askFixBtn').onclick = () => void askAgentXToFixFile();
+loadUploads();
+</script>
+
+<script id="agentx-always-latest-patch-bridge-v4">
+(function () {
+  let lastImportedStamp = "";
+  let userEditedProposal = false;
+
+  function getEl(id) { return document.getElementById(id); }
+  function setStatus(msg) { if (typeof status === "function") status(msg); }
+
+  function parseStored(raw) {
+    if (!raw) return null;
+    const text = String(raw);
+    try {
+      const obj = JSON.parse(text);
+      if (obj && typeof obj.content === "string") {
+        return { content: obj.content, ts: Number(obj.ts || 0) };
+      }
+    } catch {}
+    return { content: text, ts: 0 };
+  }
+
+  function stripFence(s) {
+    return String(s || "").replace(/^\s+|\s+$/g, "");
+  }
+
+  function extractJsonPatch(src) {
+    const jsonFence = src.match(/```(?:json|agentx-workspace-patch)?\s*([\s\S]*?"(?:content|replacement|replacement_content)"[\s\S]*?)```/i);
+    if (!jsonFence) return "";
+    try {
+      const obj = JSON.parse(jsonFence[1]);
+      return String(obj.content || obj.replacement || obj.replacement_content || "").trimEnd() + "\n";
+    } catch { return ""; }
+  }
+
+  function extractReplacementSection(src) {
+    const patterns = [
+      /###\s*Replacement Content\s*```[\w.+-]*\s*([\s\S]*?)```/i,
+      /##\s*Replacement Content\s*```[\w.+-]*\s*([\s\S]*?)```/i,
+      /\*\*Replacement Content\*\*\s*```[\w.+-]*\s*([\s\S]*?)```/i,
+      /Replacement Content\s*```[\w.+-]*\s*([\s\S]*?)```/i,
+    ];
+    for (const re of patterns) {
+      const m = src.match(re);
+      if (m && m[1] && m[1].trim()) return m[1].trimEnd() + "\n";
+    }
+
+    // Replacement Content without a fenced block: capture until next markdown heading.
+    const plain = src.match(/(?:###|##|\*\*)?\s*Replacement Content\*{0,2}\s*\n+([\s\S]*?)(?:\n#{2,3}\s|\n\*\*[^\n]+\*\*|$)/i);
+    if (plain && plain[1] && plain[1].trim()) return plain[1].trimEnd() + "\n";
+
+    return "";
+  }
+
+  function extractFirstCodeFence(src) {
+    const m = src.match(/```[\w.+-]*\s*([\s\S]*?)```/);
+    if (m && m[1] && m[1].trim()) return m[1].trimEnd() + "\n";
+    return "";
+  }
+
+  function extractBestProposal(raw) {
+    const src = String(raw || "").trim();
+    if (!src) return "";
+
+    // 1. Explicit AgentX patch JSON wins.
+    const json = extractJsonPatch(src);
+    if (json) return json;
+
+    // 2. Replacement Content section wins over diff/explanation.
+    const replacement = extractReplacementSection(src);
+    if (replacement) return replacement;
+
+    // 3. If the answer only contains a code block, use it.
+    const code = extractFirstCodeFence(src);
+    if (code) return code;
+
+    // 4. Final fallback: use the entire latest AgentX response as the proposed replacement.
+    // This supports plain text files, Lua, config files, markdown, and examples like:
+    // "Title: This is\nheader: Sample!".
+    return src.trimEnd() + "\n";
+  }
+
+  function latestStoredResponse() {
+    const keys = [
+      "agentx.latestAssistantResponse",
+      "agentx.pendingPatchResponse",
+      "agentx.lastAssistantPatch",
+      "agentx.lastFixResponse",
+      "agentx.workspacePatchResponse"
+    ];
+
+    let best = null;
+    for (const key of keys) {
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        try {
+          const parsed = parseStored(storage.getItem(key));
+          if (!parsed || !parsed.content) continue;
+          if (!best || parsed.ts >= best.ts) best = { ...parsed, key };
+        } catch {}
+      }
+    }
+    return best;
+  }
+
+  async function preloadLatestAgentXPatch(options = {}) {
+    const force = Boolean(options.force);
+    const proposed = getEl("proposedContent");
+    if (!proposed) return false;
+    if (!state || !state.file || !state.file.path) return false;
+    if (userEditedProposal && !force) return false;
+
+    const latest = latestStoredResponse();
+    if (!latest || !latest.content) return false;
+
+    const stamp = `${latest.ts}:${latest.content.length}:${state.file.path}`;
+    if (!force && stamp === lastImportedStamp) return false;
+
+    const proposal = extractBestProposal(latest.content);
+    if (!proposal.trim()) return false;
+
+    proposed.value = proposal;
+    lastImportedStamp = stamp;
+    userEditedProposal = false;
+
+    if (typeof switchTab === "function") switchTab("patch");
+    if (typeof previewDiff === "function") previewDiff();
+    if (typeof validateProposal === "function") {
+      try { await validateProposal(); } catch (err) { setStatus(`Auto-validation failed: ${err.message || err}`); }
+    }
+
+    setStatus(`Loaded latest AgentX response into Patch Preview.`);
+    return true;
+  }
+
+  // Expose for buttons and debugging.
+  window.agentxExtractBestProposal = extractBestProposal;
+  window.agentxPreloadLatestAgentXPatch = preloadLatestAgentXPatch;
+
+  function wireProposalTracking() {
+    const proposed = getEl("proposedContent");
+    if (proposed && proposed.dataset.agentxTrackEdit !== "1") {
+      proposed.dataset.agentxTrackEdit = "1";
+      proposed.addEventListener("input", () => { userEditedProposal = true; });
+    }
+  }
+
+  function wireImportButton() {
+    const btn = getEl("importAgentXPatchBtn");
+    if (btn && btn.dataset.agentxAlwaysLatest !== "1") {
+      btn.dataset.agentxAlwaysLatest = "1";
+      btn.textContent = "Load latest AgentX patch";
+      btn.addEventListener("click", async () => {
+        const ok = await preloadLatestAgentXPatch({ force: true });
+        if (!ok) {
+          const pasted = window.prompt("No latest AgentX response found. Paste AgentX response or replacement text here:");
+          if (!pasted) return;
+          const proposed = getEl("proposedContent");
+          proposed.value = extractBestProposal(pasted);
+          userEditedProposal = false;
+          if (typeof switchTab === "function") switchTab("patch");
+          if (typeof previewDiff === "function") previewDiff();
+          if (typeof validateProposal === "function") await validateProposal();
+        }
+      });
+    }
+  }
+
+  function wrapOpenFile() {
+    if (window.__agentxOpenFileLatestPatchWrapped) return;
+    if (typeof window.openFile !== "function") return;
+    const original = window.openFile;
+    window.openFile = async function (...args) {
+      const result = await original.apply(this, args);
+      userEditedProposal = false;
+      setTimeout(() => preloadLatestAgentXPatch({ force: false }), 350);
+      return result;
+    };
+    window.__agentxOpenFileLatestPatchWrapped = true;
+  }
+
+  window.addEventListener("storage", () => preloadLatestAgentXPatch({ force: false }));
+  window.addEventListener("agentx-workspace-patch-response", () => preloadLatestAgentXPatch({ force: true }));
+
+  function boot() {
+    wireProposalTracking();
+    wireImportButton();
+    wrapOpenFile();
+    preloadLatestAgentXPatch({ force: false });
+  }
+
+  boot();
+  setInterval(boot, 1000);
+})();
+</script>
+
+
+<script id="agentx-latest-patch-status-fix">
+(function () {
+  function getProposalBox() {
+    return document.getElementById("proposedContent");
+  }
+
+  function setWorkspaceStatus(message) {
+    const statusEl = document.getElementById("status");
+    if (statusEl) statusEl.textContent = message;
+  }
+
+  function extractFirstCodeBlock(text) {
+    const src = String(text || "");
+
+    const patterns = [
+      /agentx-workspace-patch\s*```(?:json)?\s*([\s\S]*?)```/i,
+      /###\s*(?:\d+\.\s*)?(?:Replacement Content|Proposed Sandbox Replacement|Proposed Replacement|Sandbox Replacement)[\s\S]*?```(?:python|py|lua|xml|json|yaml|yml|sh|bash|text)?\s*([\s\S]*?)```/i,
+      /\*\*(?:Replacement Content|Proposed Sandbox Replacement|Proposed Replacement|Sandbox Replacement)\*\*[\s\S]*?```(?:python|py|lua|xml|json|yaml|yml|sh|bash|text)?\s*([\s\S]*?)```/i,
+      /(?:Replacement Content|Proposed Sandbox Replacement|Proposed Replacement|Sandbox Replacement)[\s\S]*?```(?:python|py|lua|xml|json|yaml|yml|sh|bash|text)?\s*([\s\S]*?)```/i,
+      /```(?:python|py|lua|xml|json|yaml|yml|sh|bash|text)?\s*([\s\S]*?)```/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = src.match(pattern);
+      if (match && match[1] && match[1].trim()) {
+        return match[1].trimEnd() + "\n";
+      }
+    }
+
+    // Final fallback: use the whole latest assistant response as the proposal.
+    // This supports plain text replacements like:
+    // Title: This is
+    // header: Sample!
+    const cleaned = src.trim();
+    if (cleaned && cleaned.length < 50000) return cleaned + "\n";
+
+    return "";
+  }
+
+  function runPreviewAndValidation() {
+    try {
+      if (typeof previewDiff === "function") previewDiff();
+    } catch (err) {
+      console.warn("previewDiff failed", err);
+    }
+
+    try {
+      if (typeof switchTab === "function") switchTab("patch");
+    } catch (err) {
+      console.warn("switchTab failed", err);
+    }
+
+    try {
+      if (typeof validateProposal === "function") {
+        Promise.resolve(validateProposal()).catch((err) => {
+          setWorkspaceStatus(`Validation failed to run: ${err?.message || err}`);
+        });
+      }
+    } catch (err) {
+      console.warn("validateProposal failed", err);
+    }
+  }
+
+  window.agentxImportLatestPatchText = function (text) {
+    const proposal = getProposalBox();
+    if (!proposal) {
+      setWorkspaceStatus("Patch proposal box not found.");
+      return false;
+    }
+
+    const replacement = extractFirstCodeBlock(text);
+    if (!replacement) {
+      setWorkspaceStatus("No AgentX patch text found.");
+      return false;
+    }
+
+    proposal.value = replacement;
+    runPreviewAndValidation();
+    setWorkspaceStatus("Imported latest AgentX response into Patch Preview and ran validation.");
+    return true;
+  };
+
+  function readStoredLatestPatch() {
+    const keys = [
+      "agentx.latestPatchResponse",
+      "agentx.lastAssistantPatch",
+      "agentx.pendingPatchResponse",
+      "agentx.lastAssistantResponse",
+      "agentx.lastFixResponse",
+      "agentx.workspacePatchResponse"
+    ];
+
+    for (const key of keys) {
+      const local = window.localStorage.getItem(key);
+      if (local && extractFirstCodeBlock(local)) return local;
+
+      const session = window.sessionStorage.getItem(key);
+      if (session && extractFirstCodeBlock(session)) return session;
+    }
+
+    return "";
+  }
+
+  function wireImportButton() {
+    const btn = document.getElementById("importAgentXPatchBtn");
+    if (!btn || btn.dataset.latestPatchStatusFix === "1") return;
+
+    btn.dataset.latestPatchStatusFix = "1";
+    btn.addEventListener("click", () => {
+      const stored = readStoredLatestPatch();
+      if (stored && window.agentxImportLatestPatchText(stored)) return;
+
+      const pasted = window.prompt("Paste the latest AgentX response or replacement content:");
+      if (!pasted) {
+        const proposal = getProposalBox();
+        if (proposal && proposal.value.trim()) {
+          runPreviewAndValidation();
+          setWorkspaceStatus("Current Patch Preview content was re-validated.");
+          return;
+        }
+        setWorkspaceStatus("No AgentX patch text was available to import.");
+        return;
+      }
+
+      window.agentxImportLatestPatchText(pasted);
+    }, true);
+  }
+
+  // Clean up false stale messages after a successful proposal exists.
+  function cleanFalseNoUsableStatus() {
+    const proposal = getProposalBox();
+    const statusEl = document.getElementById("status");
+    if (!proposal || !statusEl) return;
+
+    const hasProposal = proposal.value.trim().length > 0;
+    const falseError = /No usable AgentX replacement-content block found/i.test(statusEl.textContent || "");
+
+    if (hasProposal && falseError) {
+      setWorkspaceStatus("Patch Preview is populated. Diff and validation are ready.");
+    }
+  }
+
+  wireImportButton();
+  cleanFalseNoUsableStatus();
+
+  setInterval(() => {
+    wireImportButton();
+    cleanFalseNoUsableStatus();
+  }, 750);
+})();
+</script>
+
+
+<script id="agentx-patch-history-ui">
+(function () {
+  function getSelectedWorkspace() { return (window.state && window.state.selected) || null; }
+  function getCurrentFile() { return (window.state && window.state.file) || null; }
+  function setStatus(msg) { if (typeof status === "function") status(msg); }
+  function apiBaseUrl() {
+    try { return window.apiBase || localStorage.getItem("agentx.apiBase") || `${location.protocol}//${location.hostname}:8000`; }
+    catch { return `${location.protocol}//${location.hostname}:8000`; }
+  }
+  async function callApi(path, opts = {}) {
+    if (typeof api === "function") return api(path, opts);
+    const res = await fetch(`${apiBaseUrl()}${path}`, opts);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
+    return res.json();
+  }
+  function escapeHtmlLocal(s) {
+    if (typeof esc === "function") return esc(s);
+    return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  }
+  function validationSummary(v) {
+    if (!v) return "validation unknown";
+    const ok = v.ok ?? v.status === "pass" ?? v.validation?.ok;
+    const status = ok ? "pass" : "fail";
+    const check = v.check || v.validator || v.validation?.validator || v.validation?.check || "validator";
+    return `${check}: ${status}`;
+  }
+  async function loadPatchHistory() {
+    const u = getSelectedWorkspace();
+    const root = document.getElementById("patchHistory");
+    if (!root) return;
+    if (!u || !u.thread_id) { root.innerHTML = '<div class="sub">Select a thread-linked workspace first.</div>'; return; }
+    root.innerHTML = '<div class="sub">Loading patch history...</div>';
+    try {
+      const data = await callApi(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/patch-history`);
+      const history = Array.isArray(data.history) ? data.history : [];
+      if (!history.length) { root.innerHTML = '<div class="sub">No patches applied yet.</div>'; return; }
+      root.innerHTML = history.map((entry, idx) => {
+        const action = entry.action || 'apply';
+        const path = entry.path || 'unknown';
+        const when = entry.timestamp || (entry.ts ? new Date(entry.ts * 1000).toLocaleString() : 'unknown time');
+        const backup = entry.backup_path || '';
+        const validation = validationSummary(entry.validation || {});
+        const canRestore = backup && action !== 'restore';
+        return `<div class="historyCard" data-history-index="${idx}">
+          <div><strong>${escapeHtmlLocal(action.toUpperCase())}</strong> ${escapeHtmlLocal(path)}</div>
+          <div class="historyMeta">${escapeHtmlLocal(when)} · ${escapeHtmlLocal(validation)}</div>
+          ${backup ? `<div class="historyMeta">backup: ${escapeHtmlLocal(backup)}</div>` : `<div class="historyMeta">backup: none recorded</div>`}
+          <div class="historyActions">
+            ${canRestore ? `<button type="button" data-restore-index="${idx}">Restore backup</button>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+      root.querySelectorAll('[data-restore-index]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const idx = Number(btn.getAttribute('data-restore-index'));
+          const entry = history[idx];
+          if (!entry || !entry.backup_path) return;
+          if (!confirm(`Restore sandbox file from backup?\n\n${entry.path}\n\n${entry.backup_path}`)) return;
+          await restorePatchBackup(entry.backup_path, entry.path);
+        });
+      });
+    } catch (err) {
+      root.innerHTML = `<div class="sub">Failed to load patch history: ${escapeHtmlLocal(err.message || err)}</div>`;
+    }
+  }
+  async function recordPatchHistory(validationResult) {
+    const u = getSelectedWorkspace();
+    const f = getCurrentFile();
+    if (!u || !u.thread_id || !f || !f.path) return;
+    try {
+      await callApi(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/patch-history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: f.path,
+          action: 'apply',
+          validation: validationResult || window.agentxLastValidationResult || {},
+          message: 'Applied from Workspaces Patch Preview.'
+        })
+      });
+      await loadPatchHistory();
+    } catch (err) {
+      setStatus(`Patch applied, but history record failed: ${err.message || err}`);
+    }
+  }
+  async function restorePatchBackup(backupPath, relPath) {
+    const u = getSelectedWorkspace();
+    if (!u || !u.thread_id) return;
+    try {
+      setStatus(`Restoring ${relPath} from backup...`);
+      await callApi(`/v1/workbench/thread/${encodeURIComponent(u.thread_id)}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup_path: backupPath })
+      });
+      await loadPatchHistory();
+      if (typeof openFile === 'function' && relPath) await openFile(relPath);
+      setStatus(`Restored ${relPath} from backup.`);
+    } catch (err) {
+      setStatus(`Restore failed: ${err.message || err}`);
+    }
+  }
+  function wireHistoryButton() {
+    const btn = document.getElementById('refreshHistoryBtn');
+    if (btn && btn.dataset.agentxHistoryWired !== '1') {
+      btn.dataset.agentxHistoryWired = '1';
+      btn.addEventListener('click', () => void loadPatchHistory());
+    }
+  }
+  function wrapValidateProposal() {
+    if (typeof window.validateProposal !== 'function' || window.validateProposal.__agentxHistoryWrapped) return;
+    const original = window.validateProposal;
+    window.validateProposal = async function (...args) {
+      const result = await original.apply(this, args);
+      window.agentxLastValidationResult = result || window.agentxLastValidationResult || {};
+      return result;
+    };
+    window.validateProposal.__agentxHistoryWrapped = true;
+  }
+  function wrapApplyPatch() {
+    if (typeof window.applyPatch !== 'function' || window.applyPatch.__agentxHistoryWrapped) return;
+    const original = window.applyPatch;
+    window.applyPatch = async function (...args) {
+      const beforeFile = getCurrentFile();
+      const result = await original.apply(this, args);
+      // Existing applyPatch re-opens the file. Record after it finishes so backend can find backup files.
+      await recordPatchHistory(window.agentxLastValidationResult || {});
+      return result;
+    };
+    window.applyPatch.__agentxHistoryWrapped = true;
+  }
+  function autoLoadOnHistoryTab() {
+    document.querySelectorAll('[data-tab="history"]').forEach(btn => {
+      if (btn.dataset.agentxHistoryTabWired === '1') return;
+      btn.dataset.agentxHistoryTabWired = '1';
+      btn.addEventListener('click', () => setTimeout(loadPatchHistory, 100));
+    });
+  }
+  function boot() {
+    wireHistoryButton();
+    wrapValidateProposal();
+    wrapApplyPatch();
+    autoLoadOnHistoryTab();
+  }
+  window.agentxLoadPatchHistory = loadPatchHistory;
+  boot();
+  setInterval(boot, 750);
+})();
+</script>
+
+</body>
+</html>
+
+<style id="agentx-force-readable-tree-v2">
+  /* Give the file tree more room inside the Workspaces page */
+  .workspace-layout,
+  .workspaces-layout,
+  main,
+  #app > div {
+    min-width: 0 !important;
+  }
+
+  /* Generic tree/list row rescue */
+  button[data-agentx-pretty-path="1"] {
+    display: grid !important;
+    grid-template-columns: 22px minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-height: 46px !important;
+    height: auto !important;
+    padding: 7px 10px !important;
+    text-align: left !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    line-height: 1.2 !important;
+  }
+
+  button[data-agentx-pretty-path="1"] .agentx-tree-icon {
+    opacity: 0.9 !important;
+    width: 18px !important;
+    text-align: center !important;
+    flex: none !important;
+  }
+
+  button[data-agentx-pretty-path="1"] .agentx-tree-name {
+    display: block !important;
+    color: #e8f7ff !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  button[data-agentx-pretty-path="1"] .agentx-tree-dir {
+    display: block !important;
+    margin-top: 3px !important;
+    color: #7f91aa !important;
+    font-size: 10px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  /* Make tree containers scroll vertically, not hide text horizontally */
+  #fileTree,
+  .file-tree,
+  .workspace-tree,
+  [data-panel="tree"] {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+</style>
+
+<script id="agentx-force-readable-tree-v2">
+(function () {
+  function cleanPath(text) {
+    return String(text || "")
+      .replace(/[📁📄]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function splitPath(path) {
+    const clean = cleanPath(path);
+    if (!clean) return null;
+
+    // Only touch likely workspace file/tree entries.
+    if (!clean.includes("/") && !clean.includes("\\")) {
+      return null;
+    }
+
+    const normalized = clean.replaceAll("\\", "/");
+    const parts = normalized.split("/").filter(Boolean);
+    const name = parts.pop() || normalized;
+    const dir = parts.length ? parts.join("/") + "/" : "";
+    return { name, dir, normalized };
+  }
+
+  function findTreePanel() {
+    const headings = Array.from(document.querySelectorAll("h1,h2,h3,h4,.title,.panel-title,strong"));
+    const heading = headings.find((el) => /file tree/i.test(el.textContent || ""));
+    if (!heading) return document;
+    return heading.closest("section,article,main,div") || document;
+  }
+
+  function prettifyTreeButtons() {
+    const panel = findTreePanel();
+    const buttons = Array.from(panel.querySelectorAll("button"));
+
+    for (const button of buttons) {
+      if (button.dataset.agentxPrettyPath === "1") continue;
+
+      const raw =
+        button.getAttribute("data-path") ||
+        button.getAttribute("title") ||
+        button.textContent ||
+        "";
+
+      const parsed = splitPath(raw);
+      if (!parsed) continue;
+
+      const isDir =
+        /folder|dir/i.test(button.className || "") ||
+        raw.trim().endsWith("/") ||
+        button.textContent?.includes("📁");
+
+      button.dataset.agentxPrettyPath = "1";
+      button.title = parsed.normalized;
+
+      button.innerHTML = `
+        <span class="agentx-tree-icon">${isDir ? "📁" : "📄"}</span>
+        <span class="agentx-tree-text">
+          <span class="agentx-tree-name"></span>
+          <span class="agentx-tree-dir"></span>
+        </span>
+      `;
+
+      const nameEl = button.querySelector(".agentx-tree-name");
+      const dirEl = button.querySelector(".agentx-tree-dir");
+      if (nameEl) nameEl.textContent = parsed.name;
+      if (dirEl) dirEl.textContent = parsed.dir;
+    }
+  }
+
+  function widenLikelyColumns() {
+    const grids = Array.from(document.querySelectorAll("main, #app > div, .workspace-layout, .workspaces-layout"));
+    for (const el of grids) {
+      const style = window.getComputedStyle(el);
+      if (style.display === "grid" && style.gridTemplateColumns.split(" ").length >= 3) {
+        el.style.gridTemplateColumns = "minmax(240px, 0.8fr) minmax(460px, 1.35fr) minmax(520px, 1.55fr)";
+      }
+    }
+  }
+
+  function run() {
+    widenLikelyColumns();
+    prettifyTreeButtons();
+  }
+
+  run();
+  setInterval(run, 800);
+
+  const observer = new MutationObserver(run);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+
+function agentxSplitPathForTree(path) {
+  const normalized = String(path || "").replaceAll("\\", "/");
+  const parts = normalized.split("/").filter(Boolean);
+  const name = parts.pop() || normalized || "(unknown)";
+  const dir = parts.length ? parts.join("/") + "/" : "";
+  return { name, dir };
+}
+
+function agentxTreeRowHtml(entry) {
+  const path = String(entry.path || "");
+  const split = agentxSplitPathForTree(path);
+  const icon = entry.type === "dir" ? "📁" : "📄";
+  const safePath = escapeHtml(path);
+  const safeName = escapeHtml(split.name);
+  const safeDir = escapeHtml(split.dir);
+  return `
+    <button class="tree-row" title="${safePath}" data-path="${safePath}">
+      <span class="tree-icon">${icon}</span>
+      <span>
+        <span class="tree-name">${safeName}</span>
+        <span class="tree-dir">${safeDir}</span>
+      </span>
+    </button>
+  `;
+}
+
+
+
+// --- AgentX auto patch preview bridge ---
+// Pulls the latest AgentX fix response from the attached chat thread, extracts
+// replacement content, fills Patch Preview, previews the diff, and validates.
+function agentxExtractWorkspacePatch(text, expectedPath) {
+  const raw = String(text || '');
+  if (!raw.trim()) return null;
+
+  // 1) Preferred structured block:
+  // ```agentx-workspace-patch
+  // {"path":"...","content":"..."}
+  // ```
+  const structured = raw.match(/```(?:agentx-workspace-patch|json)\s*\n([\s\S]*?)```/i);
+  if (structured) {
+    try {
+      const obj = JSON.parse(structured[1]);
+      const content = obj.content || obj.replacement || obj.replacement_content;
+      const path = obj.path || obj.file || obj.file_path;
+      if (content && (!expectedPath || !path || String(path).endsWith(expectedPath) || String(expectedPath).endsWith(path))) {
+        return { content: String(content), source: 'structured patch block', path: path || expectedPath };
+      }
+    } catch (_) {}
+  }
+
+  // 2) Markdown heading used by current Ask AgentX flow.
+  const replacementHeading = raw.match(/###\s*Replacement Content[\s\S]*?```(?:python|py|lua|json|xml|bash|sh|text)?\s*\n([\s\S]*?)```/i);
+  if (replacementHeading) {
+    return { content: replacementHeading[1].replace(/\n$/, ''), source: 'Replacement Content block', path: expectedPath };
+  }
+
+  // 3) Alternate labels.
+  const altHeading = raw.match(/(?:Replacement Content|Proposed Content|Final Content|Full Replacement)\s*:?\s*\n```(?:python|py|lua|json|xml|bash|sh|text)?\s*\n([\s\S]*?)```/i);
+  if (altHeading) {
+    return { content: altHeading[1].replace(/\n$/, ''), source: 'replacement code block', path: expectedPath };
+  }
+
+  // 4) Fallback: if the answer has code blocks and this workspace file is pending,
+  // use the last code block that is not a diff.
+  const blocks = [...raw.matchAll(/```([^\n`]*)\n([\s\S]*?)```/g)];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const lang = String(blocks[i][1] || '').trim().toLowerCase();
+    const body = String(blocks[i][2] || '').replace(/\n$/, '');
+    if (!body.trim()) continue;
+    if (lang.includes('diff') || body.startsWith('--- ') || body.includes('\n+++ ')) continue;
+    if (lang === 'cmd' || lang === 'powershell' || lang === 'bash') continue;
+    return { content: body, source: 'last non-diff code block', path: expectedPath };
+  }
+
+  return null;
+}
+
+async function agentxFetchThreadMessages(threadId) {
+  const data = await api(`/v1/threads/${encodeURIComponent(threadId)}`);
+  return data.messages || data.thread?.messages || [];
+}
+
+async function agentxAutoImportPatchFromChat(force = false) {
+  const u = state.selected;
+  const f = state.file;
+  if (!u?.thread_id || !f?.path) {
+    status('Open a thread-linked workspace file before importing an AgentX patch.');
+    return false;
+  }
+
+  try {
+    const messages = await agentxFetchThreadMessages(u.thread_id);
+    const assistants = messages.filter((m) => m.role === 'assistant' && String(m.content || '').trim()).reverse();
+    for (const msg of assistants) {
+      const key = `${u.thread_id}:${f.path}:${msg.id || msg.ts || String(msg.content || '').length}`;
+      if (!force && localStorage.getItem('agentx.autoPatchPreview.lastKey') === key) continue;
+
+      const patch = agentxExtractWorkspacePatch(msg.content, f.path);
+      if (!patch?.content) continue;
+
+      $('proposedContent').value = patch.content;
+      localStorage.setItem('agentx.autoPatchPreview.lastKey', key);
+      switchTab('patch');
+      previewDiff();
+      status(`Imported AgentX patch from chat (${patch.source}). Validating proposal...`);
+      try {
+        await validateProposal();
+      } catch (e) {
+        status(`Imported patch, but validation failed to run: ${e.message}`);
+      }
+      return true;
+    }
+    status('No usable AgentX replacement-content block found in this thread yet.');
+    return false;
+  } catch (e) {
+    status(`Failed to import AgentX patch from chat: ${e.message}`);
+    return false;
+  }
+}
+
+function agentxScheduleAutoPatchImport() {
+  // Small delay lets the file inspector UI finish updating first.
+  setTimeout(() => void agentxAutoImportPatchFromChat(false), 700);
+}
+
+</script>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../tokens";
+import { copyTextToClipboard } from "../clipboard";
 import type { CodeCanvasLanguage, CodeCanvasState } from "../codeCanvas";
 import { languageAccentClass, languageLabel } from "../codeCanvas";
 
@@ -32,12 +33,8 @@ export function CodeCanvas({ canvas, onUpdate, onClose, onSendSelection }: Props
   };
 
   const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(selectedText || canvas.content);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyTextToClipboard(selectedText || canvas.content);
+    setCopied(ok);
   };
 
   return (

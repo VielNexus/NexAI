@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { tokens } from "../tokens";
+import { copyTextToClipboard } from "../clipboard";
 
 export type MessageFeedback = "like" | "dislike" | null;
 
@@ -81,12 +82,8 @@ export function MessageActions({
   const shortContent = useMemo(() => content.trim(), [content]);
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyTextToClipboard(content);
+    setCopied(ok);
   };
 
   const saveScript = () => {
