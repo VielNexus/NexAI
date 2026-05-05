@@ -29,6 +29,25 @@ function formatLatency(value: number | null | undefined): string {
   return `${Number(value).toFixed(1)} ms`;
 }
 
+function normalizedHealthUrl(check?: HealthCheckStatus | null): string {
+  return String(check?.url || "").trim().replace(/\/$/, "");
+}
+
+function buildOllamaProfileWarnings(data: FullHealthResponse | null): string[] {
+  if (!data) return [];
+  const warnings: string[] = [];
+  const fastUrl = normalizedHealthUrl(data.ollama.fast);
+  const heavyUrl = normalizedHealthUrl(data.ollama.heavy);
+  if (fastUrl && heavyUrl && fastUrl === heavyUrl) {
+    warnings.push("Fast and Heavy Ollama endpoints use the same URL. Configure separate ports for true fast/heavy routing.");
+  }
+  for (const [label, check] of Object.entries(data.ollama)) {
+    if (!check) continue;
+    if (!check.ok) warnings.push(`${label} Ollama endpoint is offline.`);
+  }
+  return warnings;
+}
+
 function HealthRow({ label, value, ok }: { label: string; value: React.ReactNode; ok?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 py-2 last:border-b-0">
@@ -99,6 +118,7 @@ function buildSummary(data: FullHealthResponse): string {
     `ollama default: ${data.ollama.default?.ok ? "online" : "offline"}`,
     `workspace: ${data.workspace.exists && data.workspace.writable ? "ready" : "check"}`,
     `validation: ${data.validation.available ? "available" : "unavailable"}`,
+    `endpoint warnings: ${buildOllamaProfileWarnings(data).length}`,
     `warnings: ${warnings.length}`,
     `errors: ${errors.length}`,
   ].join("\\n");
@@ -110,6 +130,8 @@ export function HealthPage({ statusOk, onSystemMessage }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const warnings = useMemo(() => health?.diagnostics?.warnings || [], [health]);
+  const endpointWarnings = useMemo(() => buildOllamaProfileWarnings(health), [health]);
+  const allWarnings = useMemo(() => [...endpointWarnings, ...warnings], [endpointWarnings, warnings]);
   const errors = useMemo(() => health?.diagnostics?.errors || [], [health]);
 
   const refresh = async () => {
@@ -222,9 +244,9 @@ export function HealthPage({ statusOk, onSystemMessage }: Props) {
 
               <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
                 <h3 className="mb-3 font-semibold text-slate-100">Warnings</h3>
-                {warnings.length ? (
+                {allWarnings.length ? (
                   <ul className="space-y-2 text-sm text-amber-100">
-                    {warnings.map((item) => (
+                    {allWarnings.map((item) => (
                       <li key={item} className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-2">{item}</li>
                     ))}
                   </ul>
