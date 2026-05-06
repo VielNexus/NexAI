@@ -256,32 +256,123 @@
   .historyMeta { color: #8fa3bd; font-size: 11px; margin-top: 4px; overflow-wrap: anywhere; }
   .historyActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .historyActions button { width: auto !important; }
+  #navigatorPanel { width: clamp(260px, 20vw, 320px); min-width: 260px; max-width: 320px; }
+  #treeNavView .header button { width: auto; white-space: nowrap; }
+  .panel.main { min-width: min(980px, calc(100vw - 420px)); }
+  .panel.main .grid2 {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 1.15fr);
+  }
+  #tab-patch {
+    grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  }
+  #tab-patch .grid2 {
+    height: 100%;
+    min-height: min(62vh, 760px);
+  }
+  #proposedContent,
+  #diffPreview {
+    min-height: min(62vh, 760px);
+  }
+  #diffPreview {
+    overflow: auto;
+  }
+  .shell {
+    grid-template-columns: clamp(260px, 20vw, 320px) minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+  .panel.main {
+    width: 100%;
+    min-width: 0 !important;
+  }
+  .panel.main .grid2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) !important;
+    gap: 10px !important;
+  }
+  #tab-patch {
+    grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  }
+  #tab-patch .grid2 {
+    min-height: clamp(560px, 68vh, 900px) !important;
+    height: 100% !important;
+  }
+  #proposedContent,
+  #diffPreview {
+    min-height: clamp(560px, 68vh, 900px) !important;
+    height: 100% !important;
+  }
+  #diffPreview {
+    overflow: auto;
+  }
+  @media (min-width: 1500px) {
+    .shell {
+      grid-template-columns: clamp(260px, 18vw, 320px) minmax(0, 1fr) !important;
+    }
+    .panel.main .grid2 {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr) !important;
+    }
+  }
+  #playgroundStatusPanel { padding: 6px 10px; margin: 6px 0; }
+  #playgroundStatusPanel .capHeader { margin-bottom: 0; }
+  .navigatorHint {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid rgba(34,211,238,.16);
+    background: rgba(8,47,73,.14);
+    border-radius: 14px;
+    color: #93c5fd;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .capPanel {
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    background: rgba(2, 6, 23, 0.58);
+    border-radius: 16px;
+    padding: 10px;
+    margin: 10px 0;
+  }
+  .capHeader { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .capTitle { color:#e2e8f0; font-weight:800; font-size:13px; }
+  .capGrid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+  .capItem { border:1px solid rgba(148,163,184,.16); background:rgba(15,23,42,.62); border-radius:12px; padding:8px; min-width:0; }
+  .capItem strong { display:block; color:#f8fafc; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .capItem span { display:block; color:#8fa3bd; font-size:11px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .capItem.ok { border-color:rgba(16,185,129,.35); background:rgba(6,78,59,.16); }
+  .capItem.warn { border-color:rgba(245,158,11,.35); background:rgba(120,53,15,.16); }
+  .capItem.bad { border-color:rgba(244,63,94,.35); background:rgba(127,29,29,.16); }
+  .capActions { display:flex; gap:8px; flex-wrap:wrap; }
+  .capActions button { width:auto !important; }
+  @media(max-width:1200px){ .capGrid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  @media(max-width:760px){ .capGrid { grid-template-columns:1fr; } }
 </style>
 
 </head>
 <body>
   <div class="shell">
-    <section class="panel">
-      <div class="header">
-        <div>
-          <div class="title">Workspaces</div>
-          <div class="sub">Uploaded archives and sandbox imports.</div>
+    <section class="panel" id="navigatorPanel">
+      <div id="workspaceNavView">
+        <div class="header">
+          <div>
+            <div class="title">Workspaces</div>
+            <div class="sub">Uploaded archives and sandbox imports.</div>
+          </div>
+          <button id="refreshBtn">Refresh</button>
         </div>
-        <button id="refreshBtn">Refresh</button>
+        <div id="uploads" class="list"></div>
       </div>
-      <div id="uploads" class="list"></div>
-    </section>
 
-    <section class="panel">
-      <div class="header">
-        <div>
-          <div class="title">File Tree</div>
-          <div id="workspaceSub" class="sub">Select a workspace.</div>
+      <div id="treeNavView" class="hidden">
+        <div class="header">
+          <div>
+            <div class="title">File Tree</div>
+            <div id="workspaceSub" class="sub">Select a workspace.</div>
+          </div>
+          <button id="backToWorkspacesBtn" type="button">Back</button>
         </div>
+        <input id="treeFilter" placeholder="Filter files, e.g. rope.py or config" />
+        <div style="height:10px"></div>
+        <div id="tree" class="list"></div>
       </div>
-      <input id="treeFilter" placeholder="Filter files, e.g. rope.py or config" />
-      <div style="height:10px"></div>
-      <div id="tree" class="list"></div>
     </section>
 
     <section class="panel main">
@@ -306,13 +397,25 @@
         </div>
       </div>
 
+      <div id="playgroundStatusPanel" class="capPanel">
+        <div class="capHeader">
+          <div>
+            <div class="capTitle">Playground Status</div>
+            <div id="playgroundStatusSummary" class="sub">No workspace selected.</div>
+          </div>
+          <div class="capActions">
+            <button id="refreshPlaygroundStatusBtn" type="button">Refresh status</button>
+          </div>
+        </div>
+      </div>
+
       <div style="min-height:0; overflow:hidden;">
         <div id="tab-view" class="tabPane" style="height:100%; display:flex; flex-direction:column; gap:8px;">
           <pre id="fileContent">No file selected.</pre>
         </div>
 
         <div id="tab-patch" class="tabPane hidden" style="height:100%; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:8px;">
-          <div class="sub">Edit the proposed content below, preview the diff, then apply only to the sandbox workspace.</div>
+          <div class="sub">Edit proposed replacement content on the left. Preview the expanded diff on the right, then apply only to the sandbox workspace.</div>
           <div class="grid2">
             <textarea id="proposedContent" placeholder="Proposed replacement content"></textarea>
             <div id="diffPreview" class="diff">No diff yet.</div>
@@ -356,7 +459,8 @@ const apiBase = (() => {
   const stored = localStorage.getItem('agentx.apiBase');
   return stored || `${location.protocol}//${location.hostname}:8000`;
 })();
-const state = { uploads: [], selected: null, tree: [], file: null, report: '', currentTab: 'view' };
+const state = { uploads: [], selected: null, tree: [], file: null, report: '', currentTab: 'view', navigatorMode: 'workspaces' };
+window.agentxWorkspaceState = () => state;
 const $ = (id) => document.getElementById(id);
 function status(msg) { $('status').textContent = msg; }
 async function api(path, opts = {}) {
@@ -371,12 +475,25 @@ async function api(path, opts = {}) {
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function fmtTime(ts) { if (!ts) return 'unknown'; return new Date(ts * 1000).toLocaleString(); }
 function uploadArray(payload) { return Array.isArray(payload) ? payload : (payload.uploads || payload.items || payload.projects || []); }
+function setNavigatorMode(mode) {
+  state.navigatorMode = mode === 'tree' ? 'tree' : 'workspaces';
+  const workspaceView = $('workspaceNavView');
+  const treeView = $('treeNavView');
+  if (workspaceView) workspaceView.classList.toggle('hidden', state.navigatorMode !== 'workspaces');
+  if (treeView) treeView.classList.toggle('hidden', state.navigatorMode !== 'tree');
+  if (typeof window.agentxUpdatePlaygroundStatus === 'function') window.agentxUpdatePlaygroundStatus();
+}
+function backToWorkspaces() {
+  setNavigatorMode('workspaces');
+  status('Workspace list ready.');
+}
 async function loadUploads() {
   status('Loading workspaces...');
   try {
     const data = await api('/v1/workbench/uploads');
     state.uploads = uploadArray(data);
     renderUploads();
+    if (!state.selected) setNavigatorMode('workspaces');
     status(`Loaded ${state.uploads.length} workspace(s).`);
   } catch (e) { status(`Failed to load workspaces: ${e.message}`); }
 }
@@ -406,6 +523,7 @@ async function selectUpload(u) {
   $('fileTitle').textContent = 'File Inspector'; $('fileContent').textContent = 'Select a file.'; $('proposedContent').value = ''; $('diffPreview').innerHTML = 'No diff yet.';
   $('reportBtn').disabled = false; $('exportBtn').disabled = !u.thread_id; if ($('askFixBtn')) $('askFixBtn').disabled = true;
   renderUploads();
+  setNavigatorMode('tree');
   await loadTree();
 }
 async function loadTree() {
@@ -592,7 +710,7 @@ function switchTab(tab) {
   $(`tab-${tab}`).classList.remove('hidden');
 }
 document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
-$('refreshBtn').onclick = loadUploads; $('treeFilter').oninput = renderTree; $('previewDiffBtn').onclick = previewDiff; $('copyCurrentBtn').onclick = () => { if (state.file) $('proposedContent').value = state.file.content || ''; previewDiff(); };
+$('refreshBtn').onclick = loadUploads; if ($('backToWorkspacesBtn')) $('backToWorkspacesBtn').onclick = backToWorkspaces; $('treeFilter').oninput = renderTree; $('previewDiffBtn').onclick = previewDiff; $('copyCurrentBtn').onclick = () => { if (state.file) $('proposedContent').value = state.file.content || ''; previewDiff(); };
 $('applyPatchBtn').onclick = applyPatch; $('findMatchesBtn').onclick = () => { switchTab('compare'); findMatches(); }; $('reportBtn').onclick = loadReport; $('exportBtn').onclick = exportZip;
 
 function compactForPrompt(value, maxChars = 14000) {
@@ -1184,6 +1302,107 @@ loadUploads();
 })();
 </script>
 
+
+<script id="agentx-playground-status-panel">
+(function () {
+  function byId(id) { return document.getElementById(id); }
+  function getState() {
+    try {
+      if (typeof window.agentxWorkspaceState === "function") return window.agentxWorkspaceState();
+      return state;
+    } catch {
+      return {};
+    }
+  }
+  function setCap(id, title, subtitle, kind) {
+    const el = byId(id);
+    if (!el) return;
+    el.className = "capItem " + (kind || "warn");
+    el.innerHTML = `<strong>${escapeLocal(title)}</strong><span>${escapeLocal(subtitle)}</span>`;
+  }
+  function escapeLocal(value) {
+    const s = String(value ?? "");
+    if (typeof esc === "function") return esc(s);
+    return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  }
+  function proposalStats(st) {
+    const proposal = byId("proposedContent");
+    const value = proposal ? proposal.value : "";
+    const current = st.file ? String(st.file.content || "") : "";
+    if (!value.trim()) return { title: "No proposal", sub: "Patch preview empty", kind: "warn" };
+    const proposalLines = value.split("\n").length;
+    const currentLines = current.split("\n").length;
+    const changed = Math.abs(proposalLines - currentLines);
+    const same = st.file && value === current;
+    return {
+      title: same ? "Proposal matches" : `${proposalLines} lines`,
+      sub: same ? "No content changes yet" : `${changed} net line change(s)`,
+      kind: same ? "warn" : "ok",
+    };
+  }
+  function validationStats() {
+    const box = byId("validationBox");
+    if (!box) return { title: "Validation unknown", sub: "Validation box missing", kind: "warn" };
+    const text = (box.textContent || "").trim();
+    if (box.classList.contains("ok")) return { title: "Validation pass", sub: text.split("\n")[0] || "Passed", kind: "ok" };
+    if (box.classList.contains("bad")) return { title: "Validation fail", sub: text.split("\n")[0] || "Failed", kind: "bad" };
+    return { title: "Not validated", sub: text.split("\n")[0] || "No validation run yet", kind: "warn" };
+  }
+  function historyStats() {
+    const root = byId("patchHistory");
+    if (!root) return { title: "History unknown", sub: "History panel missing", kind: "warn" };
+    const count = root.querySelectorAll(".historyCard").length;
+    if (count > 0) return { title: `${count} patch(es)`, sub: "Patch history loaded", kind: "ok" };
+    return { title: "No history", sub: "No patch history loaded", kind: "warn" };
+  }
+  function update() {
+    const st = getState();
+    const selected = st.selected || null;
+    const selectedId = selected ? (selected.project_id || selected.id || "workspace") : "";
+    setCap("capWorkspace", selected ? selectedId : "No workspace", selected ? (selected.thread_id ? "thread linked" : "upload workspace") : "Select an upload", selected ? "ok" : "warn");
+
+    const treeCount = Array.isArray(st.tree) ? st.tree.length : 0;
+    setCap("capTree", treeCount ? `${treeCount} entries` : "Tree idle", treeCount ? "File tree loaded" : "No files loaded", treeCount ? "ok" : "warn");
+
+    const file = st.file || null;
+    setCap("capFile", file?.path || "No file", file ? `${file.size ?? 0} bytes${file.truncated ? " - truncated" : ""}` : "Open a source file", file ? "ok" : "warn");
+
+    const proposal = proposalStats(st);
+    setCap("capProposal", proposal.title, proposal.sub, proposal.kind);
+
+    const validation = validationStats();
+    setCap("capValidation", validation.title, validation.sub, validation.kind);
+
+    const history = historyStats();
+    setCap("capHistory", history.title, history.sub, history.kind);
+
+    const summary = byId("playgroundStatusSummary");
+    if (summary) {
+      const parts = [
+        selected ? `workspace: ${selectedId}` : "no workspace",
+        treeCount ? `${treeCount} files` : "tree idle",
+        file?.path ? `file: ${file.path}` : "no file",
+        proposal.title.toLowerCase(),
+        validation.title.toLowerCase(),
+        history.title.toLowerCase(),
+      ];
+      summary.textContent = parts.join(" - ");
+    }
+  }
+
+  function wire() {
+    byId("refreshPlaygroundStatusBtn")?.addEventListener("click", update);
+    byId("proposedContent")?.addEventListener("input", update);
+    byId("treeFilter")?.addEventListener("input", update);
+  }
+
+  window.agentxUpdatePlaygroundStatus = update;
+  wire();
+  update();
+  setInterval(update, 1000);
+})();
+</script>
+
 </body>
 </html>
 
@@ -1327,7 +1546,7 @@ loadUploads();
     for (const el of grids) {
       const style = window.getComputedStyle(el);
       if (style.display === "grid" && style.gridTemplateColumns.split(" ").length >= 3) {
-        el.style.gridTemplateColumns = "minmax(240px, 0.8fr) minmax(460px, 1.35fr) minmax(520px, 1.55fr)";
+        el.style.gridTemplateColumns = "clamp(260px, 20vw, 320px) minmax(0, 1fr)";
       }
     }
   }
