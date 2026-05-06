@@ -23,6 +23,7 @@ from agentx_api.routes.chat import router as chat_router
 from agentx_api.routes.drafts import router as drafts_router
 from agentx_api.routes.projects import router as projects_router
 from agentx_api.routes.scripts import router as scripts_router
+from agentx_api.routes.coding_zone import router as coding_zone_router
 from agentx_api.routes.fs import router as fs_router
 from agentx_api.routes.github import router as github_router
 from agentx_api.routes.ollama_updates import router as ollama_updates_router
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(threads_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(projects_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(scripts_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
+    app.include_router(coding_zone_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(unsafe_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(rag_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
     app.include_router(fs_router, prefix="/v1", dependencies=[Depends(require_api_auth)])
